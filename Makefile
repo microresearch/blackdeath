@@ -1,16 +1,21 @@
-# makefile, written by guido socher
 MCU=atmega128
-#MCU=at90s4433
 CC=avr-gcc
 CEXTRA=-Wa,-adhlns=$(<:.c=.lst)
 #EXTERNAL_RAM = -Wl,--defsym=__heap_start=0x801100,--defsym=__heap_end=0x80ffff
 #EXTERNAL_RAM = -Wl,-Tdata=0x801100,--defsym=__heap_end=0x80ffff
 LDFLAGS  = -mmcu=${MCU} ${EXTERNAL_RAM} -Wl,-u,vfprintf -lprintf_flt -lm
-#LDFLAGS  = -mmcu=${MCU} -Wl,-u,vfprintf -lprintf_flt -lm
 OBJCOPY=avr-objcopy
 # optimize for size:
 CFLAGS=-g -mmcu=$(MCU) -Wall -Wstrict-prototypes -O3 -mcall-prologues ${CEXTRA}
 TARGET=blackdeath
+
+DEVICE = m128
+AVRDUDE = avrdude -c usbasp -p $(DEVICE)
+FUSEH = 0x99
+FUSEE = 0xff
+FUSEL = 0xff
+
+
 #-------------------
 all: blackdeath.hex
 #-------------------
@@ -36,6 +41,12 @@ blackdeath.elf: blackdeath.o
 
 disasm:	blackdeath.elf
 	avr-objdump -d noise.elf
+
+fuse:
+	$(AVRDUDE) -U hfuse:w:$(FUSEH):m -U lfuse:w:$(FUSEL):m -U efuse:w:$(FUSEE):m
+
+flash: all
+	$(AVRDUDE) -U flash:w:blackdeath.hex:i
 
 
 #-------------------
