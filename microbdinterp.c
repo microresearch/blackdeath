@@ -16,7 +16,7 @@ right: controls - plague step and plague process select, filter modifier!
 
 TODO: 
 
-** crashing still!!!!
+** fix wrapping in hodge and update swap over
 
 */
 
@@ -39,30 +39,18 @@ TODO:
 #define floor(x) ((int)(x))
 
 #define MAX_SAM 255
+
 #define BV(bit) (1<<(bit)) // Byte Value => converts bit into a byte value. One at bit location.
 #define cbi(reg, bit) reg &= ~(BV(bit)) // Clears the corresponding bit in register reg
 #define sbi(reg, bit) reg |= (BV(bit))              // Sets the corresponding bit in register reg
 #define HEX__(n) 0x##n##UL
-#define B8__(x) ((x&0x0000000FLU)?1:0)		\
-  +((x&0x000000F0LU)?2:0)			\
-  +((x&0x00000F00LU)?4:0)			\
-  +((x&0x0000F000LU)?8:0)			\
-  +((x&0x000F0000LU)?16:0)			\
-  +((x&0x00F00000LU)?32:0)			\
-  +((x&0x0F000000LU)?64:0)			\
-  +((x&0xF0000000LU)?128:0)
-#define B8(d) ((unsigned char)B8__(HEX__(d)))
-#define low(port, pin) (port &= ~_BV(pin))
-#define high(port, pin) (port |= _BV(pin))
-#define PI 3.1415926535897932384626433832795
-#define BET(A, B, C)  (((A>=B)&&(A<=C))?1:0)    /* a between [b,c] */
-#define NSTEPS  10000
 #define recovered 129
 #define dead 255                                                                   
 #define susceptible 0
-#define tau 2                                                                         
 
-signed char insdir,dir; unsigned char filterk, cpu, plague, step, hardk, fhk, instruction, instructionp, IP, controls, hardware, samp, count,qqq;
+signed char insdir,dir; 
+
+unsigned char filterk, cpu, plague, step, hardk, fhk, instruction, instructionp, IP, controls, hardware, samp, count,qqq;
 
 static unsigned char xxx[MAX_SAM+12];
 
@@ -98,7 +86,7 @@ void leftsh(unsigned int cel){
 }
 
 void rightsh(unsigned int cel){
-OCR1A=cel>>filterk;
+  OCR1A=cel>>filterk;
 }
 
 void mult(unsigned int cel){
@@ -110,8 +98,6 @@ void divvv(unsigned int cel){
 }
 
 void (*filtermod[])(unsigned int cel) = {leftsh, rightsh, mult, divvv};  
-
-unsigned char controls;
 
 void mutate(unsigned char* cells){
   unsigned char x,y;
@@ -163,9 +149,7 @@ void hodge(unsigned char* cellies){
   x++;
   if (x>((MAX_SAM/2)-CELLLEN-1)) {
     x=CELLLEN+1;
-    //    swap = cells; cells = newcells; newcells = swap;
-    // how to swop over???
-  flag^=0x01;
+    flag^=0x01;
   }
 }
 
@@ -195,8 +179,6 @@ void cel(unsigned char* cells){
       } 
   }
 }
-
-unsigned char ostack[20], stack[20], omem;
 
 void SIR(unsigned char* cellies){
   unsigned char cell,x,sum=0;
@@ -228,7 +210,6 @@ void SIR(unsigned char* cellies){
 	if (rand()%10 < p) newcells[x] = 1;       
       }
     }
-
   }
   flag^=0x01;
 }
@@ -259,7 +240,9 @@ void life(unsigned char* cellies){
 
 // instructions for plague CPUS!
 
-// BIOTA!
+unsigned char ostack[20], stack[20], omem;
+
+/* BIOTA: two dimensional memory map */
 
 unsigned char btdir,dcdir;
 
@@ -272,11 +255,8 @@ unsigned char btempty(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-
 unsigned char btoutf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=(int)cells[omem]<<filterk;
 (*filtermod[qqq]) ((int)cells[omem]);
-
   return IP;
 }
 
@@ -380,7 +360,7 @@ unsigned char redplague(unsigned char* cells, unsigned char IP){
   else return IP+insdir;
 }
 
-//3- death - one by one fall dead
+//2- death - one by one fall dead
 unsigned char reddeath(unsigned char* cells, unsigned char IP){
   if (clock==13){
     clock=13;
@@ -391,7 +371,7 @@ unsigned char reddeath(unsigned char* cells, unsigned char IP){
   else return IP+insdir;
 }
 
-//2- clock every hour - instruction counter or IP -some kind of TICK
+//3- clock every hour - instruction counter or IP -some kind of TICK
 unsigned char redclock(unsigned char* cells, unsigned char IP){
   clock++;
   if (clock%60==0) {
@@ -481,7 +461,6 @@ unsigned char redoutside(unsigned char* cells, unsigned char IP){
 // plague
 
 unsigned char ploutf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=((int)cells[IP+1]+(int)cells[IP-1])<<filterk;
 (*filtermod[qqq]) ((int)cells[omem]);
 
   return IP+insdir;
@@ -547,13 +526,13 @@ unsigned char rdjmp(unsigned char* cells, unsigned char IP){
 unsigned char rdjmz(unsigned char* cells, unsigned char IP){
   if (cells[(IP+cells[IP+2])]==0) IP=cells[IP+1];
   else IP+=3;
-    return IP;
+  return IP;
 }
 
 unsigned char rdjmg(unsigned char* cells, unsigned char IP){
   if (cells[(IP+cells[IP+2])]>=0) IP=cells[IP+1];
   else IP+=3;
-    return IP;
+  return IP;
 }
 
 unsigned char rddjz(unsigned char* cells, unsigned char IP){
@@ -562,12 +541,12 @@ unsigned char rddjz(unsigned char* cells, unsigned char IP){
   cells[x]=cells[x]-1;
   if (cells[x]==0) IP=cells[IP+1];
   else IP+=3;
-    return IP;
+  return IP;
 }
 
 unsigned char rddat(unsigned char* cells, unsigned char IP){
   IP+=3;
-    return IP;
+  return IP;
 }
 
 unsigned char rdcmp(unsigned char* cells, unsigned char IP){
@@ -577,31 +556,26 @@ unsigned char rdcmp(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char rdoutf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=(int)cells[(IP+1)]<<filterk; 
   (*filtermod[qqq]) ((int)cells[IP+1]);
-
   IP+=3;
-    return IP;
+  return IP;
 }
 
 unsigned char rdoutp(unsigned char* cells, unsigned char IP){
   OCR0A=cells[(IP+2)]; 
   IP+=3;
-    return IP;
+  return IP;
 }
-
 
 // SIR: inc if , die if, recover if, getinfected if 
 
 unsigned char SIRoutf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=((int)cells[(IP+1)]+(int)cells[IP-1])<<filterk;
   (*filtermod[qqq]) ((int)cells[(IP+1)]+(int)cells[IP-1]);
-
   return IP+insdir;
 }
 
 unsigned char SIRoutp(unsigned char* cells, unsigned char IP){
-  OCR0A=cells[(IP+1)]+cells[IP-1]; // neg?
+  OCR0A=cells[(IP+1)]+cells[IP-1];
   return IP+insdir;
 }
 
@@ -661,7 +635,6 @@ unsigned char bfdecm(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char bfoutf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=(int)cells[omem]<<filterk; 
   (*filtermod[qqq]) ((int)cells[omem]);
   return IP++;
 }
@@ -691,7 +664,7 @@ unsigned char bfbrac2(unsigned char* cells, unsigned char IP){
   return i;
 }
 
-// first attempt - add in DATA POINTER= omem
+// first attempt
 
 unsigned char finc(unsigned char* cells, unsigned char IP){
   omem++; 
@@ -734,7 +707,6 @@ unsigned char fdecm(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char outf(unsigned char* cells, unsigned char IP){
-  //  OCR1A=(int)cells[omem]<<filterk;
 (*filtermod[qqq]) ((int)cells[omem]);
   return IP+insdir;
 }
@@ -745,7 +717,6 @@ unsigned char outp(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char outff(unsigned char* cells, unsigned char IP){
-  //  OCR1A=(int)omem<<filterk;
 (*filtermod[qqq]) ((int)cells[omem]);
   return IP+insdir;
 }
@@ -852,13 +823,15 @@ void main(void)
   initcell(cells);
   DDRD|=0x47; // 0,1,2,6 as out
   DDRB|=0x02;  
-  TCCR1A= (1<<COM1A0);// | (1<<WGM11) | (1<<WGM10); // KEEP AS CTC
+  TCCR1A= (1<<COM1A0);// | (1<<WGM11) | (1<<WGM10); // KEEP AS CTC for filter
   //    TCCR1B= (1<<WGM12) |(1<<CS10); // /1024 now
   //  TCCR1A= (1<<COM1A0) | (1<<WGM11) | (1<<WGM10); // PWM
   TCCR1B= (1<<WGM12) | (1<<CS11);// | (1<<CS10); // /64
 
-  TCCR0A=(1<<COM0A0) | (1<<WGM01)| (1<<WGM00); // PWM
+  TCCR0A=(1<<COM0A0) | (1<<WGM01)| (1<<WGM00); // PWM output
   TCCR0B|=(1<<CS00) | (1<<CS02) | (1<<WGM02);  // divide by one more - is now on /1024
+
+  DIDR0=0x0f;
 
   cbi(PORTD,PD0);
   sbi(PORTD,PD1); 
@@ -882,7 +855,6 @@ void main(void)
     step=(controls%32)+1;
     plague=controls>>5;
     // plague CPU!
-    //        cpu=0;
     if (count%((IP%32)+1)==0){
 
 	  switch(cpu){
@@ -895,7 +867,6 @@ void main(void)
 	  case 1:
 	    instruction=cells[instructionp];
 	    instructionp=(*instructionsetplague[instruction%8]) (cells, instructionp);
-	    //	    insdir=dir*(IP%16)+1;
 	    insdir=dir;
 	    if (cells[instructionp]==255 && dir<0) dir=1;
 	    else if (cells[instructionp]==255 && dir>0) dir=-1; // barrier
@@ -903,19 +874,16 @@ void main(void)
 	  case 2:
 	    instruction=cells[instructionp];
 	    instructionp=(*instructionsetbf[instruction%9]) (cells, instructionp);
-	    //	    insdir=dir*(IP%16)+1;
 	    insdir=dir;
 	    break;
 	  case 3:
 	    instruction=cells[instructionp];
 	    instructionp=(*instructionsetSIR[instruction%6]) (cells, instructionp);
-	    //	    insdir=dir*(IP%16)+1;
 	    insdir=dir;
 	    break;
 	  case 4:
 	    instruction=cells[instructionp];
 	    instructionp=(*instructionsetredcode[instruction%11]) (cells, instructionp); 
-	    //	    insdir=dir*(IP%16)+1;
 	    insdir=dir;
 	    break;
 	  case 5:
@@ -926,8 +894,7 @@ void main(void)
 	  case 6:
 	    instruction=cells[instructionp];
 	    instructionp=(*instructionsetreddeath[instruction%7]) (cells, instructionp); 
-	    //	    insdir=dir*(IP%16)+1;
-	    	    insdir=dir;
+	    insdir=dir;
 	    break;
 	  case 7:
 	    //la biota
@@ -977,7 +944,6 @@ void main(void)
     }
 
     fhk=hardware>>4;
-    //fhk=1;
         switch(fhk)      {
     case 0:
       cbi(DDRB,PB1); //filter off
