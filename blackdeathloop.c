@@ -1,5 +1,7 @@
+// JUNE: writehead now on knob[0]/datagen knob
+
 #define F_CPU 16000000UL 
-#define samplerate 6000 // was 12000 // try raise samplerate!
+#define samplerate 6000 // was 12000 // try raise samplerate! - try 5000 or 10000
 
 #define true 1
 #define false 0
@@ -131,43 +133,43 @@ SIGNAL(TIMER1_COMPA_vect) {
       writehead=maxsamp-cttt;
       break;
     case 2:
-      writehead=maxsamp-(cttt+(knob[4]));
+      writehead=maxsamp-(cttt+(knob[0]));
       break;
     case 3:
-      writehead=maxsamp-(cttt-(knob[4]));
+      writehead=maxsamp-(cttt-(knob[0]));
       break;
     case 4:
-      writehead=cttt*knob[4];
+      writehead=cttt*knob[0];
       break;
     case 5:
-      writehead=cttt/knob[4];
+      writehead=cttt/knob[0];
       break;
     case 6:
-      writehead=cttt>>(knob[4]>>4); 
+      writehead=cttt>>(knob[0]>>4); 
       break;
     case 7:
-      writehead=cttt<<(knob[4]>>4); 
+      writehead=cttt<<(knob[0]>>4); 
       break;
     case 8:
-      writehead=cttt+knob[4];
+      writehead=cttt+knob[0];
       break;
     case 9:
       writehead=cttt<<dtae;
       break;
     case 10:
-      writehead=cttt<<(knob[4]>>4);
+      writehead=cttt<<(knob[0]>>4);
       break;
     case 11:
       writehead=cttt+dtae;
       break;
     case 12:
-      writehead=cttt+(dtae<<(knob[4]>>4));
+      writehead=cttt+(dtae<<(knob[0]>>4));
       break;
     case 13:
-      writehead=maxsamp-(cttt*knob[4]);
+      writehead=maxsamp-(cttt*knob[0]);
       break;
     case 14:
-      writehead=maxsamp-(cttt<<(knob[4]>>4));
+      writehead=maxsamp-(cttt<<(knob[0]>>4));
     case 15:
       writehead=(dtae+cttt);
       break;
@@ -181,25 +183,25 @@ SIGNAL(TIMER1_COMPA_vect) {
       writehead=maxsamp-(cttt*dtae);
       break;
     case 19:
-      writehead=writehead>>(knob[4]>>4);
+      writehead=writehead>>(knob[0]>>4);
       break;
     case 20:
-      writehead=writehead<<(knob[4]>>4);
+      writehead=writehead<<(knob[0]>>4);
       break;
     case 21:
       writehead=writehead-dtae;
       break;
     case 22:
-      writehead=writehead-(dtae*knob[4]);
+      writehead=writehead-(dtae*knob[0]);
       break;
     case 23:
-      writehead=writehead+(dtae*knob[4]);
+      writehead=writehead+(dtae*knob[0]);
       break;
     case 24:
-      writehead=writehead/(dtae*knob[4]);
+      writehead=writehead/(dtae*knob[0]);
       break;
     case 25:
-      writehead=writehead*knob[4];
+      writehead=writehead*knob[0];
       break;
     case 26:
       writehead=writehead+dtae;
@@ -208,10 +210,10 @@ SIGNAL(TIMER1_COMPA_vect) {
       writehead=writehead/dtae;
       break;
     case 28:
-      writehead+=knob[4];
+      writehead+=knob[0];
       break;
     case 29:
-      writehead=writehead*dtae*knob[4];
+      writehead=writehead*dtae*knob[0];
       break;
     case 30:
       writehead=dtae;
