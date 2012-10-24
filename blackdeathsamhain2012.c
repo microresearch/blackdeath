@@ -2,19 +2,19 @@
 
 TODO:
 
-- porting new stuff from microbd (datagens/interpreters)
-
-- be able to move around the cell/program space/random walks
-
-= more manipulations and use for cellhead (so cell/prog and samplespace are closer)
-
-//TEST//
+= more manipulations and use for cellhead (so cell/prog and
+samplespace are closer or easier overlapped)
 
 - cleanups and speedups/test all datagens
 
-- more feedback across datagens (so control of params with datagens)
+- *****does seem to crash/get stuck quite often!
 
-- distortion and feedback controlled by datagens
+//new features on knobs//
+
+knob2-righttop also mods cttt
+0 on 5 and 1 bottom left/right means dtae determines sample length
+knob3-lefttop also does distortion effects as mod %4
+knob4-bottommid <16 puts cellhead to dtae
 
 */
 
@@ -107,8 +107,9 @@ const uint8_t  sinewave[] PROGMEM= //256 values
 
 signed char insdir,dir; 
 
-unsigned char filterk, cpu, plague, step, hardk, fhk, instruction, instructionp, IP, controls, hardware, samp, count,qqq;
+unsigned char filterk, cpu, plague, step, hardk, fhk, instruction, IP, controls, hardware, samp, count,qqq;
 
+unsigned int instructionp;
 
 int ADConvert(short Channel);
 
@@ -134,13 +135,12 @@ void write_DAC(uint8_t data)
 }
 
 SIGNAL(TIMER1_COMPA_vect) {
-
-  unsigned int ADresult;
-
-  unsigned char mmmmm;
+  unsigned char ctmod;
 
   maxsamp=(uint32_t)((knob[1]+2)*233);
-  lowersamp=(uint32_t)((knob[5]+1)*234); 
+  if (knob[1]==0) maxsamp=MAX_SAM/dtae;
+  lowersamp=(uint32_t)((knob[5]+1)*234);
+  if (knob[5]==0) lowersamp=MAX_SAM/dtae;
 
   if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
   if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
@@ -153,10 +153,13 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   // poss mods as eg. *, /, +, - <<, >> and dtae ops
 
+  // can do away with diff of dtae and knob as just do in datagen
+  // maybe (is question of speed here but also overlapping use of knob0 as
+  // datagen selector
 
   //  mmmmm=(knob[4]>>5); // 0-7
   weff=(knob[3]>>3); // 0-31
-   weff=3;
+  //   weff=3;
     switch(weff){
       case 0:
 	writehead=cttt;
@@ -165,7 +168,7 @@ SIGNAL(TIMER1_COMPA_vect) {
 	writehead=cttt+dtae;
 	break;
       case 2:
-	writehead=cttt-dtae;
+	//	writehead=cttt-dtae;
 	break;
       case 3:
 	writehead=cttt*dtae;
@@ -186,7 +189,7 @@ SIGNAL(TIMER1_COMPA_vect) {
       writehead=maxsamp-cttt; 
       break;
       case 9:
-      writehead=maxsamp-cttt-dtae; 
+	//      writehead=maxsamp-cttt-dtae; 
       break;
       case 10:
       writehead=maxsamp-(cttt*dtae); 
@@ -277,8 +280,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     case 0:
       readhead=cttt;
       break;      
-    case 1:
-      readhead=maxsamp-cttt; 
+    case 1:      readhead=maxsamp-cttt; 
       break;
     case 2:
       readhead=cttt<<(knob[0]>>3); // speeedups
@@ -296,7 +298,7 @@ SIGNAL(TIMER1_COMPA_vect) {
       readhead=cttt+dtae;
       break;
     case 7:
-      readhead=cttt-dtae;
+      //   readhead=cttt-dtae;
       break;
     case 8:
       readhead=cttt/(dtae+1);
@@ -305,7 +307,7 @@ SIGNAL(TIMER1_COMPA_vect) {
       readhead=cttt*dtae+1;
       break;
     case 10:
-      readhead=maxsamp-(dtae<<2);
+      //      readhead=maxsamp-(dtae<<2);
       break;
     case 11:
       readhead=readhead<<(knob[0]>>3);
@@ -328,7 +330,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     case 16:
       xxramptr = (unsigned char *)(0x1101+cttt); // just loops // - also as delay
       *xramptr = *xxramptr;
-      readhead=maxsamp-(cttt<<(knob[0]>>3));
+      //      readhead=maxsamp-(cttt<<(knob[0]>>3));
       break;      
     case 17:
       *xramptr=(dtae%255);
@@ -373,7 +375,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     case 27:
       xxramptr = (unsigned char *)(0x1100+(maxsamp-cttt)); // just loops backwards
       *xramptr ^= *xxramptr; // also other logical opps
-			 readhead=cttt+ (*xxramptr<<2);
+      readhead=cttt+ (*xxramptr<<2);
       break;
     case 28:
       xxramptr = (unsigned char *)(0x1100+((cttt*(knob[0]>>3))%maxsamp));
@@ -381,14 +383,16 @@ SIGNAL(TIMER1_COMPA_vect) {
       readhead=*xxramptr<<(knob[0]>>3);
       break;
     case 29:
-      *xramptr=dtae;      readhead=cttt*dtae;
+      *xramptr=dtae;      
+      readhead=cttt*dtae;
       break;
     case 30:
-      *xramptr=dtae<<(knob[0]>>3);       readhead=cttt-dtae;
+      *xramptr=dtae<<(knob[0]>>3);       
+      readhead=cttt-dtae;
       break;
     case 31:
       *xramptr=dtae<<(knob[0]>>3); 
-      readhead=*(unsigned char *)(0x1100+(cellhead));
+      readhead=cellhead+cttt;
   }
 
   xramptr = (unsigned char *)(0x1100+lowersamp+(readhead%tween));
@@ -402,7 +406,32 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   high(PORTB, CYWM_nSS);
 
-  cttt++; 
+  ctmod=knob[2]%8;
+  switch(ctmod){
+  case 0:
+    cttt++;
+    break;
+  case 1:
+    cttt--;
+    break;
+  case 2:
+    cttt+=dtae;
+    break;
+  case 3:
+    cttt-=dtae;
+    break;
+  case 4:
+    cttt=cttt<<dtae;
+    break;
+  case 5:
+    cttt=cttt>>dtae;
+    break;
+  case 6:
+    cttt*=dtae;
+    break;
+  case 7:
+    cttt=dtae;
+  }
 }
 
 // instructions for plague CPUS!
@@ -413,7 +442,7 @@ unsigned char ostack[20], stack[20], omem;
 
 unsigned char btdir,dcdir;
 
-unsigned char btempty(unsigned char* cells, unsigned char IP){
+unsigned char btempty(unsigned char* cells, unsigned int IP){
   // turn around
   if (btdir==0) btdir=1;
   else if (btdir==1) btdir=0;
@@ -427,7 +456,7 @@ unsigned char btoutp(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btstraight(unsigned char* cells, unsigned char IP){
+unsigned char btstraight(unsigned char* cells, unsigned int IP){
   if (dcdir==0) omem+=1;
   else if (dcdir==1) omem-=1;
   else if (dcdir==2) omem+=16;
@@ -440,9 +469,10 @@ unsigned char btstraight(unsigned char* cells, unsigned char IP){
   else if (btdir==2) btdir=3;
   else if (btdir==3) btdir=2;
     }
+  return IP;
 }
 
-unsigned char btbackup(unsigned char* cells, unsigned char IP){
+unsigned char btbackup(unsigned char* cells, unsigned int IP){
   if (dcdir==0) omem-=1;
   else if (dcdir==1) omem+=1;
   else if (dcdir==2) omem-=16;
@@ -457,7 +487,7 @@ unsigned char btbackup(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btturn(unsigned char* cells, unsigned char IP){
+unsigned char btturn(unsigned char* cells, unsigned int IP){
   if (dcdir==0) omem+=16;
   else if (dcdir==1) omem-=16;
   else if (dcdir==2) omem+=1;
@@ -465,7 +495,7 @@ unsigned char btturn(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btunturn(unsigned char* cells, unsigned char IP){
+unsigned char btunturn(unsigned char* cells, unsigned int IP){
   if (dcdir==0) omem-=16;
   else if (dcdir==1) omem+=16;
   else if (dcdir==2) omem-=1;
@@ -473,7 +503,7 @@ unsigned char btunturn(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btg(unsigned char* cells, unsigned char IP){
+unsigned char btg(unsigned char* cells, unsigned int IP){
   unsigned char x;
   while (x<20 && cells[omem]!=0){
     if (dcdir==0) omem+=1;
@@ -484,7 +514,7 @@ unsigned char btg(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btclear(unsigned char* cells, unsigned char IP){
+unsigned char btclear(unsigned char* cells, unsigned int IP){
   if (cells[omem]==0){
   if (btdir==0) btdir=1;
   else if (btdir==1) btdir=0;
@@ -495,7 +525,7 @@ unsigned char btclear(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char btdup(unsigned char* cells, unsigned char IP){
+unsigned char btdup(unsigned char* cells, unsigned int IP){
   if (cells[omem]==0 || cells[omem-1]!=0){
   if (btdir==0) btdir=1;
   else if (btdir==1) btdir=0;
@@ -512,7 +542,7 @@ unsigned char clock, count;
 
 //1- the plague within (12 midnight) - all the cells infect
 
-unsigned char redplague(unsigned char* cells, unsigned char IP){
+unsigned char redplague(unsigned char* cells, unsigned int IP){
   if (clock==12){
     clock=12;
     cells[IP+1]=cells[IP];
@@ -523,10 +553,10 @@ unsigned char redplague(unsigned char* cells, unsigned char IP){
 }
 
 //2- death - one by one fall dead
-unsigned char reddeath(unsigned char* cells, unsigned char IP){
+unsigned char reddeath(unsigned char* cells, unsigned int IP){
   if (clock==13){
     clock=13;
-    cells[IP+count]=((unsigned char *)(0x1100+cttt));
+    cells[IP+count]=*((unsigned char *)(0x1100+cttt));
     count++;
     return IP; // just keeps on going
   }
@@ -534,7 +564,7 @@ unsigned char reddeath(unsigned char* cells, unsigned char IP){
 }
 
 //3- clock every hour - instruction counter or IP -some kind of TICK
-unsigned char redclock(unsigned char* cells, unsigned char IP){
+unsigned char redclock(unsigned char* cells, unsigned int IP){
   clock++;
   if (clock%60==0) {
     dtae^=255;
@@ -544,7 +574,7 @@ unsigned char redclock(unsigned char* cells, unsigned char IP){
 }
 
 //4- seven rooms: divide cellspace into 7 - 7 layers with filter each
-unsigned char redrooms(unsigned char* cells, unsigned char IP){
+unsigned char redrooms(unsigned char* cells, unsigned int IP){
   /* need to change
 
   switch(IP%7){
@@ -589,14 +619,14 @@ unsigned char redrooms(unsigned char* cells, unsigned char IP){
 
   //5- unmasking (change neighbouring cells)
 
-unsigned char redunmask(unsigned char* cells, unsigned char IP){
+unsigned char redunmask(unsigned char* cells, unsigned int IP){
   cells[IP-1]^=255;
   cells[IP+1]^=255;
 return IP+insdir;
 }
   //6- the prince (omem) - the output! walking through 7 rooms 
 
-unsigned char redprospero(unsigned char* cells, unsigned char IP){
+unsigned char redprospero(unsigned char* cells, unsigned int IP){
 
   unsigned char dirrr;
   // prince/omem moves at random through rooms
@@ -612,7 +642,7 @@ unsigned char redprospero(unsigned char* cells, unsigned char IP){
 }
 
   //7- the outside - the input!
-unsigned char redoutside(unsigned char* cells, unsigned char IP){
+unsigned char redoutside(unsigned char* cells, unsigned int IP){
 
   // input sample to cell (which one neighbour to omem)
   cells[omem+1]=*((unsigned char *)(0x1100+cttt));
@@ -624,17 +654,17 @@ unsigned char redoutside(unsigned char* cells, unsigned char IP){
 
 // plague
 
-unsigned char ploutp(unsigned char* cells, unsigned char IP){
+unsigned char ploutp(unsigned char* cells, unsigned int IP){
   dtae=cells[IP+1]+cells[IP-1];
   return IP+insdir;
 }
 
-unsigned char plenclose(unsigned char* cells, unsigned char IP){
+unsigned char plenclose(unsigned char* cells, unsigned int IP){
   cells[IP]=255; cells[IP+1]=255;
   return IP+2;
 }
 
-unsigned char plinfect(unsigned char* cells, unsigned char IP){
+unsigned char plinfect(unsigned char* cells, unsigned int IP){
 
   if (cells[IP]<128) {
     cells[IP+1]= cells[IP];
@@ -643,12 +673,12 @@ unsigned char plinfect(unsigned char* cells, unsigned char IP){
   return IP+insdir;
 }
 
-unsigned char pldie(unsigned char* cells, unsigned char IP){
+unsigned char pldie(unsigned char* cells, unsigned int IP){
   cells[IP-1]=0; cells[IP+1]=0;
   return IP+insdir;
 }
 
-unsigned char plwalk(unsigned char* cells, unsigned char IP){
+unsigned char plwalk(unsigned char* cells, unsigned int IP){
   // changing direction
   if (dir<0 && (cells[IP]%0x03)==1) dir=1;
   else if (dir>1 && (cells[IP]%0x03)==0) dir=-1;
@@ -661,39 +691,39 @@ unsigned char plwalk(unsigned char* cells, unsigned char IP){
 
 // redcode
 
-unsigned char rdmov(unsigned char* cells, unsigned char IP){
+unsigned char rdmov(unsigned char* cells, unsigned int IP){
   cells[(IP+cells[IP+2])]=cells[(IP+cells[IP+1])];
   return IP+=3;
 }
 
-unsigned char rdadd(unsigned char* cells, unsigned char IP){
+unsigned char rdadd(unsigned char* cells, unsigned int IP){
   cells[(IP+cells[IP+2])]=cells[(IP+cells[IP+2])]+cells[(IP+cells[IP+1])];
   return IP+=3;
 }
 
-unsigned char rdsub(unsigned char* cells, unsigned char IP){
+unsigned char rdsub(unsigned char* cells, unsigned int IP){
   cells[(IP+cells[IP+2])]=cells[(IP+cells[IP+2])]-cells[(IP+cells[IP+1])];
   return IP+=3;
 }
 
-unsigned char rdjmp(unsigned char* cells, unsigned char IP){
+unsigned char rdjmp(unsigned char* cells, unsigned int IP){
   IP=IP+cells[IP+1];
   return IP;
 }
 
-unsigned char rdjmz(unsigned char* cells, unsigned char IP){
+unsigned char rdjmz(unsigned char* cells, unsigned int IP){
   if (cells[(IP+cells[IP+2])]==0) IP=cells[IP+1];
   else IP+=3;
   return IP;
 }
 
-unsigned char rdjmg(unsigned char* cells, unsigned char IP){
+unsigned char rdjmg(unsigned char* cells, unsigned int IP){
   if (cells[(IP+cells[IP+2])]>=0) IP=cells[IP+1];
   else IP+=3;
   return IP;
 }
 
-unsigned char rddjz(unsigned char* cells, unsigned char IP){
+unsigned char rddjz(unsigned char* cells, unsigned int IP){
   unsigned char x;
   x=(IP+cells[IP+2]);
   cells[x]=cells[x]-1;
@@ -702,18 +732,18 @@ unsigned char rddjz(unsigned char* cells, unsigned char IP){
   return IP;
 }
 
-unsigned char rddat(unsigned char* cells, unsigned char IP){
+unsigned char rddat(unsigned char* cells, unsigned int IP){
   IP+=3;
   return IP;
 }
 
-unsigned char rdcmp(unsigned char* cells, unsigned char IP){
+unsigned char rdcmp(unsigned char* cells, unsigned int IP){
   if (cells[(IP+cells[IP+2])]!=cells[(IP+cells[IP+1])]) IP+=6;
   else IP+=3;
   return IP;
 }
 
-unsigned char rdoutp(unsigned char* cells, unsigned char IP){
+unsigned char rdoutp(unsigned char* cells, unsigned int IP){
   dtae=cells[(IP+2)]; 
   IP+=3;
   return IP;
@@ -721,17 +751,17 @@ unsigned char rdoutp(unsigned char* cells, unsigned char IP){
 
 // SIR: inc if , die if, recover if, getinfected if 
 
-unsigned char SIRoutp(unsigned char* cells, unsigned char IP){
+unsigned char SIRoutp(unsigned char* cells, unsigned int IP){
   dtae=cells[(IP+1)]+cells[IP-1];
   return IP+insdir;
 }
 
-unsigned char SIRincif(unsigned char* cells, unsigned char IP){
+unsigned char SIRincif(unsigned char* cells, unsigned int IP){
   if ((cells[(IP+1)]>0 && cells[(IP+1)]<128)) cells[IP]++;
   return IP+insdir;
 }
 
-unsigned char SIRdieif(unsigned char* cells, unsigned char IP){
+unsigned char SIRdieif(unsigned char* cells, unsigned int IP){
   
   if ((cells[(IP+1)]>0 && cells[(IP+1)]<128)) {
     if (rand()%10 < 4) cells[IP] = dead;       
@@ -739,12 +769,12 @@ unsigned char SIRdieif(unsigned char* cells, unsigned char IP){
   return IP+insdir;
 }
 
-unsigned char SIRrecif(unsigned char* cells, unsigned char IP){
+unsigned char SIRrecif(unsigned char* cells, unsigned int IP){
   if (cells[(IP+1)] >= 128) cells[IP] = recovered;                                             
   return IP+insdir;
 }
 
-unsigned char SIRinfif(unsigned char* cells, unsigned char IP){
+unsigned char SIRinfif(unsigned char* cells, unsigned int IP){
 
   if (cells[(IP+1)] == 0) {   
                                                  
@@ -761,44 +791,44 @@ unsigned char SIRinfif(unsigned char* cells, unsigned char IP){
 
 unsigned char cycle;
 
-unsigned char bfinc(unsigned char* cells, unsigned char IP){
+unsigned char bfinc(unsigned char* cells, unsigned int IP){
   omem++; 
   return IP++;
 }
 
-unsigned char bfdec(unsigned char* cells, unsigned char IP){
+unsigned char bfdec(unsigned char* cells, unsigned int IP){
   omem--; 
   return IP++;
 }
 
-unsigned char bfincm(unsigned char* cells, unsigned char IP){
+unsigned char bfincm(unsigned char* cells, unsigned int IP){
   cells[omem]++; 
   return IP++;
 }
 
-unsigned char bfdecm(unsigned char* cells, unsigned char IP){
+unsigned char bfdecm(unsigned char* cells, unsigned int IP){
   cells[omem]--; 
   return IP++;
 }
 
-unsigned char bfoutp(unsigned char* cells, unsigned char IP){
+unsigned char bfoutp(unsigned char* cells, unsigned int IP){
   dtae=cells[omem]; 
   return IP++;
 }
 
-unsigned char bfin(unsigned char* cells, unsigned char IP){
+unsigned char bfin(unsigned char* cells, unsigned int IP){
   cells[omem] = *((unsigned char *)(0x1100+cttt));
   return IP++;
 }
 
-unsigned char bfbrac1(unsigned char* cells, unsigned char IP){
+unsigned char bfbrac1(unsigned char* cells, unsigned int IP){
   cycle++; 
   if(cycle>=20) cycle=0; 
   ostack[cycle] = IP; 
   return IP++;
 }
 
-unsigned char bfbrac2(unsigned char* cells, unsigned char IP){
+unsigned char bfbrac2(unsigned char* cells, unsigned int IP){
   int i;
   if(cells[omem] != 0) i = ostack[cycle]-1; 
   cycle--; 
@@ -808,103 +838,103 @@ unsigned char bfbrac2(unsigned char* cells, unsigned char IP){
 
 // first attempt
 
-unsigned char finc(unsigned char* cells, unsigned char IP){
+unsigned char finc(unsigned char* cells, unsigned int IP){
   omem++; 
   return IP+insdir;
 }
 
-unsigned char fin1(unsigned char* cells, unsigned char IP){
+unsigned char fin1(unsigned char* cells, unsigned int IP){
   omem=*((unsigned char *)(0x1100+cttt));
   return IP+insdir;
 }
 
-unsigned char fdec(unsigned char* cells, unsigned char IP){
+unsigned char fdec(unsigned char* cells, unsigned int IP){
   omem--; 
   return IP+insdir;
 }
 
-unsigned char fincm(unsigned char* cells, unsigned char IP){
+unsigned char fincm(unsigned char* cells, unsigned int IP){
   cells[omem]++; 
   return IP+insdir;
 }
 
-unsigned char fdecm(unsigned char* cells, unsigned char IP){
+unsigned char fdecm(unsigned char* cells, unsigned int IP){
   cells[omem]--; 
   return IP+insdir;
 }
 
-unsigned char outp(unsigned char* cells, unsigned char IP){
+unsigned char outp(unsigned char* cells, unsigned int IP){
   dtae=cells[omem];
   return IP+insdir;
 }
 
-unsigned char outpp(unsigned char* cells, unsigned char IP){
+unsigned char outpp(unsigned char* cells, unsigned int IP){
   dtae=omem;
   return IP+insdir;
 }
 
-unsigned char plus(unsigned char* cells, unsigned char IP){
+unsigned char plus(unsigned char* cells, unsigned int IP){
   cells[IP]+=1;
   return IP+insdir;
 }
 
-unsigned char minus(unsigned char* cells, unsigned char IP){
+unsigned char minus(unsigned char* cells, unsigned int IP){
   cells[IP]-=1;
   return IP+insdir;
 }
 
-unsigned char bitshift1(unsigned char* cells, unsigned char IP){
+unsigned char bitshift1(unsigned char* cells, unsigned int IP){
   cells[IP]=cells[IP]<<1;
   return IP+insdir;
 }
 
-unsigned char bitshift2(unsigned char* cells, unsigned char IP){
+unsigned char bitshift2(unsigned char* cells, unsigned int IP){
   cells[IP]=cells[IP]<<2;
   return IP+insdir;
 }
 
-unsigned char bitshift3(unsigned char* cells, unsigned char IP){
+unsigned char bitshift3(unsigned char* cells, unsigned int IP){
   cells[IP]=cells[IP]<<3;
   return IP+insdir;
 }
 
-unsigned char branch(unsigned char* cells, unsigned char IP){
+unsigned char branch(unsigned char* cells, unsigned int IP){
   if (cells[IP+1]==0) IP=cells[omem];
   return IP+insdir;
 }
 
-unsigned char jump(unsigned char* cells, unsigned char IP){
+unsigned char jump(unsigned char* cells, unsigned int IP){
   if (cells[(IP+1)]<128) return IP+cells[(IP+1)];
   else return IP+insdir;
 }
 
-unsigned char infect(unsigned char* cells, unsigned char IP){
+unsigned char infect(unsigned char* cells, unsigned int IP){
   int x=IP-1;
   if (x<0) x=MAX_SAM;
   if (cells[x]<128) cells[(IP+1)]= cells[IP];
   return IP+insdir;
 }
 
-unsigned char store(unsigned char* cells, unsigned char IP){
+unsigned char store(unsigned char* cells, unsigned int IP){
   cells[IP]=cells[cells[IP+1]];
   return IP+insdir;
 }
 
-unsigned char skip(unsigned char* cells, unsigned char IP){
+unsigned char skip(unsigned char* cells, unsigned int IP){
   return IP+insdir;
 }
 
-unsigned char direction(unsigned char* cells, unsigned char IP){
+unsigned char direction(unsigned char* cells, unsigned int IP){
   if (dir<0) dir=1;
   else dir=-1;
   return IP+insdir;
 }
 
-unsigned char die(unsigned char* cells, unsigned char IP){
+unsigned char die(unsigned char* cells, unsigned int IP){
   return IP+insdir;
 }
 
-unsigned char writesamp(unsigned char* cells, unsigned char IP){
+unsigned char writesamp(unsigned char* cells, unsigned int IP){
   cells[IP]=*((unsigned char *)(0x1100+cttt));
   return IP+insdir;
 }
@@ -950,7 +980,6 @@ void initross(rosstype* ross){
 void runross(rosstype* ross){
   double lx0,ly0,lz0,lx1,ly1,lz1;
   double h,a,b,c;
-  int x;
 
   h = ross->h;
   a = ross->a;
@@ -1085,7 +1114,7 @@ void initifs(ifss* ifs){
 
 void runifs(ifss* ifs){
   double random_num;
-  int iter,i,it;
+  int iter,i;
   int column = 6, row = 4;
 
   ifs->ifscount++;
@@ -1358,7 +1387,7 @@ int runorbit(int accelerate){
 
 int main(void)
 {
-  unsigned char x=0;
+  unsigned char x=0, distie;
   uint8_t step=1;
   int scale;
   uint8_t k1,k2,q,g,kn;
@@ -1370,19 +1399,19 @@ int main(void)
 
   // 7 sets
 
-  unsigned char (*instructionsetfirst[])(unsigned char* cells, unsigned char IP) = {outpp,finc,fdec,fincm,fdecm,fin1,outp,plus,minus,bitshift1,bitshift2,bitshift3,branch,jump,infect,store,writesamp,skip,direction,die}; // 20 instructions
+  unsigned char (*instructionsetfirst[])(unsigned char* cells, unsigned int IP) = {outpp,finc,fdec,fincm,fdecm,fin1,outp,plus,minus,bitshift1,bitshift2,bitshift3,branch,jump,infect,store,writesamp,skip,direction,die}; // 20 instructions
 
-  unsigned char (*instructionsetplague[])(unsigned char* cells, unsigned char IP) = {writesamp, ploutp, plenclose, plinfect, pldie, plwalk}; // 8 
+  unsigned char (*instructionsetplague[])(unsigned char* cells, unsigned int IP) = {writesamp, ploutp, plenclose, plinfect, pldie, plwalk}; // 6
 
-  unsigned char (*instructionsetbf[])(unsigned char* cells, unsigned char IP) = {bfinc,bfdec,bfincm,bfdecm,bfoutp,bfin,bfbrac1,bfbrac2}; // 9
+  unsigned char (*instructionsetbf[])(unsigned char* cells, unsigned int IP) = {bfinc,bfdec,bfincm,bfdecm,bfoutp,bfin,bfbrac1,bfbrac2}; // 8
 
-  unsigned char (*instructionsetSIR[])(unsigned char* cells, unsigned char IP) = {SIRoutp,SIRincif,SIRdieif,SIRrecif,SIRinfif}; // 6
+  unsigned char (*instructionsetSIR[])(unsigned char* cells, unsigned int IP) = {SIRoutp,SIRincif,SIRdieif,SIRrecif,SIRinfif}; // 5
 
-  unsigned char (*instructionsetredcode[])(unsigned char* cells, unsigned char IP) = {rdmov,rdadd,rdsub,rdjmp,rdjmz,rdjmg,rddjz,rddat,rdcmp,rdoutp}; // 11
+  unsigned char (*instructionsetredcode[])(unsigned char* cells, unsigned int IP) = {rdmov,rdadd,rdsub,rdjmp,rdjmz,rdjmg,rddjz,rddat,rdcmp,rdoutp}; // 10
 
-  unsigned char (*instructionsetbiota[])(unsigned char* cells, unsigned char IP) = {btempty,btoutp,btstraight,btbackup,btturn,btunturn,btg,btclear,btdup}; // 10
+  unsigned char (*instructionsetbiota[])(unsigned char* cells, unsigned int IP) = {btempty,btoutp,btstraight,btbackup,btturn,btunturn,btg,btclear,btdup}; // 9
 
-  unsigned char (*instructionsetreddeath[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclock,redrooms,redunmask,redprospero,redoutside}; // 7
+  unsigned char (*instructionsetreddeath[])(unsigned char* cells, unsigned int IP) = {redplague,reddeath,redclock,redrooms,redunmask,redprospero,redoutside}; // 7
 
   instructionp=0; insdir=1; dir=1; btdir=0; dcdir=0;
 
@@ -1434,9 +1463,10 @@ int main(void)
   
   for(;;){
     step=(knob[4]>>4)+1;
-    scale=knob[0]%16;
-    //scale=4;
-    cellhead=(knob[4]+1)*234; // or random walk through 
+    //    step=1;
+    scale=knob[0]%6;
+    cellhead=(knob[4]+1)*234; // or random walk through
+    if (cellhead<16) cellhead=MAX_SAM/dtae;
     // and if we have feedback? knob[x]=dtae
     // how to switch feedback?
 
@@ -1445,7 +1475,7 @@ int main(void)
     x++;
 
     if (x%step==0){
-	kn=25;
+      kn=1;
       switch(kn){ // to 32
       case 0:
 	dtae=olddtae<<scale;
@@ -1522,15 +1552,18 @@ int main(void)
       case 21:
 	dtae+=(knob[0]>>3);
 	break;
-      case 22:
-	ptrr=ptr+dtae;
-	dtae=*(ptrr)<<scale;
+      case 24:
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	instructionp=(*instructionsetplague[instruction%6]) (cells, instructionp);
+	insdir=dir;
+	if (cells[instructionp]==255 && dir<0) dir=1;
+	else if (cells[instructionp]==255 && dir>0) dir=-1; // barrier
 	break;
       case 23:
 	  ptrr=(int *)0x005d;
 	  dtae=*ptrr<<scale;
 	break;
-      case 24:
+      case 22:
 	dtae=pgm_read_byte(&sinewave[x])<<scale; // frequency
 	break;
       case 25:
@@ -1540,40 +1573,41 @@ int main(void)
 	insdir=dir;
 	break;
       case 26:
-	    instruction=cells[instructionp];
-	    instructionp=(*instructionsetbf[instruction%9]) (cells, instructionp);
-	    insdir=dir;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	instructionp=(*instructionsetbf[instruction%8]) (ptrr, instructionp);
+	insdir=dir;
 	    break;
       case 27:
-	    instruction=cells[instructionp];
-	    instructionp=(*instructionsetSIR[instruction%6]) (cells, instructionp);
-	    insdir=dir;
-	    break;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	instructionp=(*instructionsetSIR[instruction%5]) (ptrr, instructionp);
+	insdir=dir;
+	break;
       case 28:
-	    instruction=cells[instructionp];
-	    instructionp=(*instructionsetredcode[instruction%11]) (cells, instructionp); 
-	    insdir=dir;
-	    break;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	instructionp=(*instructionsetredcode[instruction%10]) (ptrr, instructionp); 
+	insdir=dir;
+	break;
       case 29:
-	    instruction=cells[instructionp];
-	    OCR0A=instruction;
-	    instructionp+=insdir;
-	    break;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	dtae=instruction;
+	instructionp+=insdir;
+	break;
       case 30:
-	    instruction=cells[instructionp];
-	    instructionp=(*instructionsetreddeath[instruction%7]) (cells, instructionp); 
-	    insdir=dir;
-	    break;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+	instructionp=(*instructionsetreddeath[instruction%7]) (ptrr, instructionp); 
+	insdir=dir;
+	break;
       case 31:
 	    //la biota
-	    instruction=cells[instructionp];
-	    instructionp=(*instructionsetbiota[instruction%10]) (cells, instructionp); 
-	    if (btdir==0) instructionp+=1;
-	    else if (btdir==1) instructionp-=1;
-	    else if (btdir==2) instructionp+=16;
-	    else if (btdir==3) instructionp-=16;
+	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+
+	instructionp=(*instructionsetbiota[instruction%9]) (ptrr, instructionp); 
+	if (btdir==0) instructionp+=1;
+	else if (btdir==1) instructionp-=1;
+	else if (btdir==2) instructionp+=16;
+	else if (btdir==3) instructionp-=16;
       } 
-      olddtae=dtae; 
+      olddtae=dtae>>scale; 
 
     }
 
@@ -1587,23 +1621,79 @@ int main(void)
   kwhich++;
   kwhich%=7;
 
-  //6 knob[4] 2-distortion choice/switchings (distort1/2/apply datagens/applyADC etc), other?
+  //6 knob[3] 2-distortion choice/switchings (distort1/2/apply datagens/applyADC etc), other?
 
+  distie=knob[3]%4;
+
+  switch(distie){
+  case 0: //usual
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
-
   }
   if ((PIND & 0x01) == 0x00) {
     high(PORTD,PD6);   // feedback - SW4 = PD6 
     low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
   }
-
   else 
     {
       low(PORTD, PD6);
       high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
     }
+  break;
+  case 1:
+    //toggle distortion only
+  if ((dtae & 0x01) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
+  else {
+    PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
+  }
+  if ((PIND & 0x01) == 0x00) {
+    high(PORTD,PD6);   // feedback - SW4 = PD6 
+    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
+  }
+  else 
+    {
+      low(PORTD, PD6);
+      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
+    }
+
+    break;
+  case 2:
+    // toggle feedback only
+  if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
+  else {
+    PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
+  }
+
+  if ((dtae & 0x01) == 0x00) {
+    high(PORTD,PD6);   // feedback - SW4 = PD6 
+    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
+  }
+  else 
+    {
+      low(PORTD, PD6);
+      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
+    }
+
+    break;
+  case 3:
+    // toggle both
+  if ((dtae & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
+  else {
+    PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
+  }
+  if ((dtae & 0x01) == 0x00) {
+    high(PORTD,PD6);   // feedback - SW4 = PD6 
+    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
+  }
+  else 
+    {
+      low(PORTD, PD6);
+      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
+    }
+
+  }  
+
 
   sei();
 
