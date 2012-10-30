@@ -1,14 +1,10 @@
 /*
 
-//
-- still bit crashy and for long time fuse was mis-set
-- knob4 needs more stuff
+// new-new scheme
 
 //
 
 - new scheme:
-
---- why all instruction sets sound the same?
 
 ///
              -0-sample effect/distortion
@@ -73,8 +69,8 @@ knob4-bottommid <16 puts cellhead to dtae
 unsigned char *cells, *newcells;
 int spointer, mpointer, prog;
 uint32_t tick, tween, place, readhead, writehead, cellhead;
-volatile uint32_t maxsamp = MAX_SAM;
-volatile uint32_t lsamp = 0;
+uint32_t maxsamp = MAX_SAM;
+uint32_t lsamp = 0;
 uint32_t lowersamp = 0;
 ifss ifs;
 rosstype ross;
@@ -152,6 +148,70 @@ void write_DAC(uint8_t data)
 }
 
 SIGNAL(TIMER1_COMPA_vect) {
+  unsigned char modrr;
+
+      maxsamp=(uint32_t)((knob[1]+2)*233);
+      //      if (knob[1]<4) maxsamp=MAX_SAM/wtae;
+      lowersamp=(uint32_t)((knob[5]+1)*234);
+      //      if (knob[5]<4) lowersamp=MAX_SAM/rtae;
+
+      if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
+      if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
+      tween=maxsamp-lowersamp;
+      lsamp=0x1100+lowersamp;
+
+
+  modrr=knob[0]>>5;
+  //  modrr=0;
+  switch(modrr){
+  case 0:
+      ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) ADCH;
+    break;
+  case 1:
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) ADCH<<rtae;
+    break;
+  case 2:
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) ADCH|rtae;
+    break;
+  case 6:
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) rtae+wtae;
+    break;
+  case 7:
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) rtae;
+    break;
+  case 4:
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) ADCH^rtae;
+    break;
+  case 5:
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) ADCH&rtae;
+  case 3:
+  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%tween));
+    break;
+  }
+
   xramptr = (unsigned char *)(lsamp+(rtae%tween));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -1271,7 +1331,7 @@ int runorbit(int accelerate){
 
 int main(void)
 {
-  unsigned char x=0, distie, dist,feedb;
+  unsigned char x=0, distie, dist,feedb,oldkn,oldknn;
   uint8_t stepr=1, stepw=1;
   uint8_t scaler,scalew; 
   uint8_t k1,k2,q,g,kn;
@@ -1363,62 +1423,6 @@ int main(void)
   //  wdt_enable(WDTO_1S);
   
   for(;;){
-
-
-  modrr=knob[0]>>5;
-    //  modrr=0;
-  switch(modrr){
-  case 0:
-      ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) ADCH;
-    break;
-  case 1:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) ADCH<<wtae;
-    break;
-  case 2:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) ADCH>>wtae;
-    break;
-  case 3:
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) wtae<<scalew;
-    break;
-  case 4:
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) wtae>>scalew;
-    break;
-  case 5:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(0x1100+cellhead);
-  *xramptr = (unsigned char) ADCH;
-    break;
-  case 6:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) ADCH^wtae;
-    break;
-  case 7:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) ADCH&wtae;
-  }
-    
 
   //    x++;
     cellhead=(knob[4]+1)*210; // or random walk through
@@ -1569,7 +1573,7 @@ int main(void)
   }
 
   stepr=(knob[2]%8)+1;
-        if (x%stepr==0){
+  if ((x%stepr)==0){
 
     kn=knob[2]>>3;
     //    	kn=0;
@@ -1709,28 +1713,14 @@ int main(void)
       //      oldrtae=rtae>>scaler; 
 	}
 
-	//  cli();
+  cli();
   ADMUX = 0x61+kwhich;                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
   knob[kwhich]=ADCH;
-  //  sei();
-  if (kwhich==1 || kwhich==5){  
-  maxsamp=(uint32_t)((knob[1]+2)*233);
-  if (knob[1]<4) maxsamp=MAX_SAM/wtae;
-  lowersamp=(uint32_t)((knob[5]+1)*234);
-  if (knob[5]<4) lowersamp=MAX_SAM/rtae;
-
-  if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
-  if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
-  tween=maxsamp-lowersamp;
-  lsamp=0x1100+lowersamp;
-
-  }
+  sei();
   kwhich++;
   kwhich%=7;
-
-
 
   //alter so that overrides
   //6 knob[0] 2-distortion choice/switchings (distort1/2/apply datagens/applyADC etc), other?
@@ -1740,7 +1730,7 @@ int main(void)
   if ((PIND & 0x01) == 0x00) feedb=1;
   else feedb=0;
   
-    
+  /*    
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
@@ -1755,9 +1745,9 @@ int main(void)
       low(PORTD, PD6);
       high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
     }
-
+  */
   
-
+  /*
     distie=knob[0]%4;
     //    distie=0;
     switch(distie){
@@ -1828,7 +1818,7 @@ int main(void)
     }
 
     }
-
+  */
 }
 
 }
