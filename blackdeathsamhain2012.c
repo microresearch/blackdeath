@@ -1,6 +1,12 @@
 /*
 
-// new-new scheme
+// new-new scheme:
+
+wtae and rtae in grain size rather than across whole
+
+what changes???
+
+do we still have start and end?
 
 //
 
@@ -15,7 +21,7 @@
 
 -5-start                  -1-end          -
 
-             -4-cellhead/params/scaling
+             -4-cellhead/params/grain size/scalings
 
 ///
 
@@ -86,7 +92,13 @@ volatile unsigned char knob[6] = {0, 0, 0, 0, 0, 0};
 uint8_t *swap;
 volatile uint8_t swapping;
 uint8_t kwhich,dist, oldknob;
-uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;                                                                         
+uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;  
+
+
+unsigned int chunk;
+unsigned int grainsize;
+
+                                                                       
 uint8_t k = 128;                                                                           int lenny=CELLLEN*CELLLEN;
 double ax[starcount];
 double ay[starcount];
@@ -148,71 +160,81 @@ void write_DAC(uint8_t data)
 }
 
 SIGNAL(TIMER1_COMPA_vect) {
-  unsigned char modrr;
+  unsigned char modrr; static unsigned int i=0;
+  i++;
+  grainsize=knob[4]+1;
+  maxsamp=(uint32_t)((knob[1]+2)*233);
+  //      if (knob[1]<4) maxsamp=MAX_SAM/wtae;
+  lowersamp=(uint32_t)((knob[5]+1)*234);
+  //      if (knob[5]<4) lowersamp=MAX_SAM/rtae;
 
-      maxsamp=(uint32_t)((knob[1]+2)*233);
-      //      if (knob[1]<4) maxsamp=MAX_SAM/wtae;
-      lowersamp=(uint32_t)((knob[5]+1)*234);
-      //      if (knob[5]<4) lowersamp=MAX_SAM/rtae;
+  if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
+  if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
+  tween=maxsamp-lowersamp;
+  //lsamp=0x1100+lowersamp;
+  
+  if (i>=grainsize) {
+    chunk+=grainsize;
+    i=0;
+  }
 
-      if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
-      if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
-      tween=maxsamp-lowersamp;
-      lsamp=0x1100+lowersamp;
+  if (chunk>=tween) chunk=tween-chunk;
+  if (chunk>=tween) chunk=0;
+  lsamp=0x1100+lowersamp+chunk;
 
 
   modrr=knob[0]>>5;
-  //  modrr=0;
   switch(modrr){
   case 0:
-      ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH;
     break;
   case 1:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH<<rtae;
     break;
   case 2:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH|rtae;
     break;
-  case 6:
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) rtae+wtae;
-    break;
   case 7:
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+    // leave as it is!
+    break;
+  case 6:
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) rtae;
     break;
   case 4:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH^rtae;
     break;
   case 5:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH&rtae;
+  break;
   case 3:
-  xramptr = (unsigned char *)(lsamp+(wtae%tween));
-  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%tween));
-    break;
+  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
+  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%grainsize));
   }
+  
+  
 
-  xramptr = (unsigned char *)(lsamp+(rtae%tween));
+  xramptr = (unsigned char *)(lsamp+(rtae%grainsize));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
   while(!(SPSR & (1<<SPIF)));	// Wait for SPI transmission complete
@@ -1725,12 +1747,12 @@ int main(void)
   //alter so that overrides
   //6 knob[0] 2-distortion choice/switchings (distort1/2/apply datagens/applyADC etc), other?
   
-  if ((PIND & 0x02) == 0x02) dist=1;
+  /*if ((PIND & 0x02) == 0x02) dist=1;
   else dist=0;
   if ((PIND & 0x01) == 0x00) feedb=1;
   else feedb=0;
-  
-  /*    
+  */
+    
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
@@ -1745,7 +1767,7 @@ int main(void)
       low(PORTD, PD6);
       high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
     }
-  */
+  
   
   /*
     distie=knob[0]%4;
