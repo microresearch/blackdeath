@@ -1,33 +1,30 @@
 /*
 
-// new-new scheme:
+/// model so far is kind of OK...
 
-wtae and rtae in grain size rather than across whole
+- function pointers instead of switch with more manipulations...
+- test/redo SIR, hodge, cel, life
 
-what changes???
-
-do we still have start and end?
-
-//
+///
 
 - new scheme:
 
 ///
-             -0-sample effect/distortion
+             -0-sample effect/what else?
 
--3-wtae/step              -2-rtae/step
+-3-wtae                   -2-rtae
 
 -----------------------------
 
 -5-start                  -1-end          -
 
-             -4-cellhead/params/grain size/scalings
+             -4-grain size
 
 ///
 
 - cleanups and speedups/test all datagens (see what changes are from micro)
 
-//new features on knobs//
+//new features on knobs????//
 
 knob5 and knob1 bottom left/right set to ZERO means dtae determines
 sample length
@@ -91,7 +88,7 @@ volatile unsigned char knob[6] = {0, 0, 0, 0, 0, 0};
 
 uint8_t *swap;
 volatile uint8_t swapping;
-uint8_t kwhich,dist, oldknob;
+uint8_t kwhich,dist, oldknob ,oldkn,oldknn;
 uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;  
 
 
@@ -159,10 +156,15 @@ void write_DAC(uint8_t data)
   high(PORTB, CYWM_nSS);
 }
 
+unsigned char flagg;
+
 SIGNAL(TIMER1_COMPA_vect) {
   unsigned char modrr; static unsigned int i=0;
-  i++;
   grainsize=knob[4]+1;
+ 
+  if (flagg==1){
+    //  if (oldkn!=knob[5] || oldknn!=knob[1]){
+
   maxsamp=(uint32_t)((knob[1]+2)*233);
   //      if (knob[1]<4) maxsamp=MAX_SAM/wtae;
   lowersamp=(uint32_t)((knob[5]+1)*234);
@@ -172,18 +174,20 @@ SIGNAL(TIMER1_COMPA_vect) {
   if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
   tween=maxsamp-lowersamp;
   //lsamp=0x1100+lowersamp;
-  
-  if (i>=grainsize) {
-    chunk+=grainsize;
-    i=0;
+  flagg=0;
   }
 
-  if (chunk>=tween) chunk=tween-chunk;
-  if (chunk>=tween) chunk=0;
-  lsamp=0x1100+lowersamp+chunk;
-
-
+  i++;
+    if (i>=grainsize) {
+      chunk+=grainsize;
+    if (chunk>=tween) chunk=tween-chunk;
+    if (chunk>tween) chunk=0;
+    lsamp=0x1100+lowersamp+chunk;
+    i=0;
+  }
+  
   modrr=knob[0]>>5;
+  //  modrr=0;
   switch(modrr){
   case 0:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -232,8 +236,6 @@ SIGNAL(TIMER1_COMPA_vect) {
   *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%grainsize));
   }
   
-  
-
   xramptr = (unsigned char *)(lsamp+(rtae%grainsize));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -369,7 +371,7 @@ unsigned char redplague(unsigned char* cells, unsigned char IP){
 unsigned char reddeath(unsigned char* cells, unsigned char IP){
   if (clock==13){
     clock=13;
-    cells[IP+count]=*((unsigned char *)(0x1100+(wtae%MAX_SAM)));
+    cells[IP+count]=*((unsigned char *)(0x1100+(wtae%MAX_SAM))); //????
     count++;
     return IP; // just keeps on going
   }
@@ -827,8 +829,10 @@ void ioinit(void)
 
 void adc_init(void)
 {
-  //ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
-  ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
+  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
+  //    ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
+    ADCSRA = (1 << ADPS2); // /16
+  //  ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
   ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
   ADCSRA |= (1 << ADEN) ;
   DDRF = 0x00; // c0 for top two/three??? as OUTPUT
@@ -1172,191 +1176,152 @@ void initcell(unsigned char *cells, uint8_t param, int redhead, uint8_t topval){
   }
 }
 
-int runhodge(unsigned char *acells, unsigned char *anewcells, uint8_t q,uint8_t k1,uint8_t k2, uint8_t g){
+void hodge(unsigned char* cellies){
+  int sum=0, numill=0, numinf=0;
+  unsigned char q,k1,k2,g;
+  static unsigned char x=CELLLEN+1;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
 
-  long sum=0, numill=0, numinf=0;
-  static int x=CELLLEN+1;
+  if (flag&0x01==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
 
-  //  for (x=CELLLEN+1;x<(lenny-CELLLEN-1);x++){
+  q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
+  if (k1==0) k1=1;
+  if (k2==0) k2=1;
 
-  sum=acells[x]+acells[x-1]+acells[x+1]+acells[x-CELLLEN]+acells[x+CELLLEN]+acells[x-CELLLEN-1]+acells[x-CELLLEN+1]+acells[x+CELLLEN-1]+acells[x+CELLLEN+1];
+  sum=cells[x]+cells[x-1]+cells[x+1]+cells[x-CELLLEN]+cells[x+CELLLEN]+cells[x-CELLLEN-1]+cells[x-CELLLEN+1]+cells[x+CELLLEN-1]+cells[x+CELLLEN+1];
 
-  if (acells[x-1]==(q-1)) numill++; else if (acells[x-1]>0) numinf++;
-  if (acells[x+1]==(q-1)) numill++; else if (acells[x+1]>0) numinf++;
-  if (acells[x-CELLLEN]==(q-1)) numill++; else if (acells[x-CELLLEN]>0) numinf++;
-  if (acells[x+CELLLEN]==(q-1)) numill++; else if (acells[x+CELLLEN]>0) numinf++;
-  if (acells[x-CELLLEN-1]==q) numill++; else if (acells[x-CELLLEN-1]>0) numinf++;
-  if (acells[x-CELLLEN+1]==q) numill++; else if (acells[x-CELLLEN+1]>0) numinf++;
-  if (acells[x+CELLLEN-1]==q) numill++; else if (acells[x+CELLLEN-1]>0) numinf++;
-  if (acells[x+CELLLEN+1]==q) numill++; else if (acells[x+CELLLEN+1]>0) numinf++;
+  if (cells[x-1]==(q-1)) numill++; else if (cells[x-1]>0) numinf++;
+  if (cells[x+1]==(q-1)) numill++; else if (cells[x+1]>0) numinf++;
+  if (cells[x-CELLLEN]==(q-1)) numill++; else if (cells[x-CELLLEN]>0) numinf++;
+  if (cells[x+CELLLEN]==(q-1)) numill++; else if (cells[x+CELLLEN]>0) numinf++;
+  if (cells[x-CELLLEN-1]==q) numill++; else if (cells[x-CELLLEN-1]>0) numinf++;
+  if (cells[x-CELLLEN+1]==q) numill++; else if (cells[x-CELLLEN+1]>0) numinf++;
+  if (cells[x+CELLLEN-1]==q) numill++; else if (cells[x+CELLLEN-1]>0) numinf++;
+  if (cells[x+CELLLEN+1]==q) numill++; else if (cells[x+CELLLEN+1]>0) numinf++;
 
-  /* Healthy cell: */
-  if(acells[x] == 0)
-    anewcells[x] = floor(numinf / k1) + floor(numill / k2);
-  /* Infected cell: */
-  else if(acells[x] < q - 1)
-    anewcells[x] = floor(sum / (numinf + 1)) + g;
-  /* Ill cell: */
+  if(cells[x] == 0)
+    newcells[x%128] = floor(numinf / k1) + floor(numill / k2);
+  else if(cells[x] < q - 1)
+    newcells[x%128] = floor(sum / (numinf + 1)) + g;
   else
-    anewcells[x] = 0;
+    newcells[x%128] = 0;
 
-  /* Bound next state to sane limit. */
-  if(anewcells[x] > q - 1)
-    anewcells[x] = q - 1;
+  if(newcells[x%128] > q - 1)
+    newcells[x%128] = q - 1;
 
   x++;
-  if (x>(lenny-CELLLEN-1)) {
+  if (x>((chunk/2)-CELLLEN-1)) {
     x=CELLLEN+1;
-    swap = cells; cells = newcells; newcells = swap;
+    flag^=0x01;
   }
-
-
-  return sum;
-    
-}
-                                                                                         
-unsigned char prob( unsigned char p ){                                                       if (rand()%10 < p) return true;                                                     
-  else return false;                                                                     
-}                                                                                        
-                                                                                         
-unsigned char sick( unsigned char patient ){
-  if ((patient > 0) && (patient < k)) return true;                                       
-  return false;                                                                          
-}                                                                                        
-
-int runSIR(unsigned char *cells, unsigned char *newcells){
-  uint8_t cell;
-  int x,sum=0;
-  for (x=CELLLEN;x<(lenny-CELLLEN);x++){
-    cell = cells[x];
-    newcells[x]=cell;
-    if (cell >= k) newcells[x] = recovered;                                                 else if (sick(cell)){
-      newcells[x]++;                                                       
-      sum++;
-    }
-    else if (cell == susceptible) {                                                    
-      if (sick(cells[x-CELLLEN]) || sick(cells[x+CELLLEN]) ||                  
-	  sick(cells[x-1]) || sick(cells[x+1])) {                  
-	if (prob(tau)) newcells[x] = 1;       
-      }
-    }
-
-    
-
-  }
-
-  //  swap = cells; cells = newcells; newcells = swap;
-  return sum;
 }
 
-
-int runlife(unsigned char *cells, unsigned char *newcells){
-
-  unsigned int x,sum,ssum;
-
-  for (x=CELLLEN+1;x<(lenny-CELLLEN-1);x++){
-    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
-    ssum+=sum;
-    sum=sum-cells[x]%2;
-    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
-    else newcells[x]=0;
-  }
-
-  //    swap = cells; cells = newcells; newcells = swap;
-  return ssum;
-}
-
-int runcell(unsigned char *cellu, unsigned char sizeLow, unsigned char sizeHigh, unsigned char rule){
+void cel(unsigned char* cells){
 
   static unsigned char l=0; unsigned char cell, state, res;
-  
+  unsigned char rule=cells[0];
+  res=0;
   l++;
   l%=CELLLEN;
 
   for (cell = 1; cell < CELLLEN; cell++){ 
-    if ((cell > sizeLow) && (cell < sizeHigh)){
       state = 0;
-      if (cellu[cell + 1+ (l*CELLLEN)]>1)
+      if (cells[cell + 1+ (l*CELLLEN)]>128)
 	state |= 0x4;
-      if (cellu[cell+(CELLLEN*l)]>1)
+      if (cells[cell+(CELLLEN*l)]>128)
 	state |= 0x2;
-      if (cellu[cell - 1 +(CELLLEN*l)]>1)
+      if (cells[cell - 1 +(CELLLEN*l)]>128)
 	state |= 0x1;
-                        
+                     
       if ((rule >> state) & 1){
 	res += 1; 
-	cellu[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
       }
       else{
-	cellu[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
       } 
+  }
+}
+
+void SIR(unsigned char* cellies){
+  unsigned char cell,x,sum=0;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+  unsigned char kk=cellies[0], p=cellies[1];
+
+  if (flag&0x01==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
+
+
+  for (x=tween;x<((chunk/2)-CELLLEN);x++){
+    cell = cells[x];
+    newcells[x]=cell;
+    if (cell >= kk) newcells[x] = recovered;                                                 else if ((cell>0 && cell<kk)){
+      newcells[x]++;                                                       
     }
-    else
-      cellu[cell+((l+1%CELLLEN)*CELLLEN)] = 0;
-  }
-  return res;
-}
-
-void initorbit(void){
-  int i;
-
-  for (i=0;i<starcount;i++){
-
-    vx[i]=10-(((float) random() / (float) 0x7fffffff)*20); 
-    vy[i]=10-(((float) random() / (float) 0x7fffffff)*20);
-    vz[i]=10-(((float) random() / (float) 0x7fffffff)*20);
-
-    x[i]=random()%1024;
-    y[i]=random()%1024;
-    z[i]=random()%1024;
-  }
-
-}
-
-int runorbit(int accelerate){
-
-  int i,j;
-  double  d1,d2,d3,dis,dis2;
-
-  for (i=0;i<starcount;i++){
-    ax[i]=ay[i]=az[i]=0;
-    for (j=0;j<starcount;j++){
-      if (i!=j){ // else do nothing
-	d1=(x[j]-x[i]);
-	d2=(y[j]-y[i]);
-	d3=(z[j]-z[i]);
-	dis=d1*d1+d2*d2+d3*d3; 
-	if (dis!=0) dis2=sqrt(dis);
-	//      force=1000/dis2;
-	ax[i]=ax[i]+accelerate*(x[j]-x[i])/dis2;
-	ay[i]=ay[i]+accelerate*(y[j]-y[i])/dis2;
+    else if (cell == susceptible) {   
+                                                 
+      if ( (cells[x-CELLLEN]>0 && cells[x-CELLLEN]<kk) ||
+	   (cells[x+CELLLEN]>0 && cells[x+CELLLEN]<kk) ||
+	   (cells[x-1]>0 && cells[x-1]<kk) ||
+	   (cells[x+1]>0 && cells[x+1]<kk))
+	{
+	if (rand()%10 < p) newcells[x] = 1;       
       }
     }
   }
+  flag^=0x01;
+}
 
-  for (i=0;i<starcount;i++){
-    vx[i]=vx[i]+ax[i];
-    vy[i]=vy[i]+ay[i];
-    vz[i]=vz[i]+az[i];
+void life(unsigned char* cellies){
+  unsigned char x, sum;
+
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+
+  if (flag&0x01==0) {
+    cells=cellies; newcells=&cells[chunk/2];
   }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
 
-  for (i=0;i<starcount;i++){
-    x[i]=x[i]+vx[i];
-    y[i]=y[i]+vy[i];
-    z[i]=z[i]+vz[i];
+  for (x=CELLLEN+1;x<((chunk/2)-CELLLEN-1);x++){
+    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
+    sum=sum-cells[x]%2;
+    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
+    else newcells[x]=0;
   }
+  
+  // swapping 
+  flag^=0x01;
+}
 
-  return x[0];
-
+void mutate(unsigned char* cells){
+  unsigned char x,y;
+  for (y=0;y<cells[0];y++){
+    x=cells[y+1];
+  cells[x]^=(x&0x0f);
+  }
 }
 
 
 int main(void)
 {
-  unsigned char x=0, distie, dist,feedb,oldkn,oldknn;
+  unsigned char x=0, distie, dist,feedb;
   uint8_t stepr=1, stepw=1;
   uint8_t scaler,scalew; 
-  uint8_t k1,k2,q,g,kn;
+  uint8_t k1,k2,q,g,kn,knn;
   uint8_t low, high, rule, accelerate;
   uint8_t celln[lenny];
   uint8_t cellx[lenny];
@@ -1434,36 +1399,26 @@ int main(void)
   initifs(&ifs);
   initcell(cells,3,0,q+1);
   inittable(3,2,41); //radius,states(k),rule
-  initorbit();
+  //  initorbit();
 
   rule=39;
-
-  unsigned char *ptr,*ptrr, modrr;
-  ptr = (unsigned char *)(0x1100);
 
   sei();
   //  wdt_enable(WDTO_1S);
   
   for(;;){
 
-  //    x++;
-    cellhead=(knob[4]+1)*210; // or random walk through
-    if (knob[4]<16) cellhead=MAX_SAM/(rtae+1);
-    // and if we have feedback? knob[x]=dtae
-    // how to switch feedback?
+    scalew=knob[3]%8;
+    scaler=knob[2]%8;
+    scalew=1;
+    scaler=1;
+    kn=knob[3]>>4;
+    knn=knob[2]>>4;
+    cli();
 
-    ptrr=ptr+cellhead;
-
-        stepw=(knob[3]%8)+1;
-        if ((x%stepw)==0){
-    kn=knob[3]>>3;
-
-        scalew=knob[4]>>4;
-	//    	kn=0;
       switch(kn){ // to 32
       case 0:
-	//	wtae=oldwtae<<scalew;
-	wtae++;
+	wtae+=scalew;
 	break;
       case 1:
 	runbrainw();
@@ -1474,136 +1429,82 @@ int main(void)
 	wtae=(ifs.returnvalx+1)<<scalew;
 	break;
       case 3:
-	wtae=runcell1d(cells,3,2)<<scalew;
+	wtae=runcell1d(lsamp,3,2)<<scalew;
 	break;
       case 4:
-	wtae=runcell1d(ptrr,3,2)<<scalew;
+	inittable(3,2,knob[0]); //radius,states(k),rule
+	wtae=runcell1d(lsamp,3,2)<<scalew;
 	break;
       case 5:
-	inittable(3,2,knob[4]); //radius,states(k),rule
-	wtae=runcell1d(cells,3,2)<<scalew;
-	break;
-      case 6:
-	wtae=runhodge(cells,newcells,q,k1,k2,g)<<scalew;
-	break;
-      case 7:
-	wtae=runhodge(ptrr,newcells,q,k1,k2,g)<<scalew;
-	break;
-      case 8:
-	wtae=runhodge(cells,newcells,q,k1,k2,knob[4]>>4)<<scalew;
-	break;
-      case 9:
-	wtae=runhodge(ptrr,newcells,knob[4],k1,k2,g)<<scalew;
-	break;
-      case 10:
-	wtae=runhodge(ptrr,newcells,q,k1,knob[4]>>6,g)<<scalew;
-	break;
-      case 11:
-	wtae=runhodge(cells,newcells,q,knob[4]>>6,k2,g)<<scalew;
-	break;
-      case 12:
 	runross(&ross);
 	wtae=ross.intz<<scalew;
 	break;
-      case 13:
-	wtae=runSIR(cells, newcells)<<scalew; 
-	swap = cells; cells = newcells; newcells = swap;
-	if (wtae==0)   initcell(cells,3,0,q+1);
-	break;
-      case 14:
-	wtae=runSIR(ptrr, newcells)<<scalew;
-	swap = ptrr; ptrr = newcells; newcells = swap;
-	break;
-      case 15:
-	wtae=runlife(cells, newcells)<<scalew;
-	swap = cells; cells = newcells; newcells = swap;
-	break;
-      case 16:
-	wtae=runlife(ptrr, newcells)<<scalew;
-	swap = ptrr; ptrr = newcells; newcells = swap;
-	break;
-      case 17: 
-	wtae=runcell(cells, low, high, rule)<<scalew;
-	break;
-      case 18:
-	wtae=runcell(ptrr, low, high, knob[4])<<scalew;
-	break;
-      case 19:
-	wtae=runorbit(knob[4])<<scalew;
-	break;
-      case 20:
-	wtae=*(ptrr)<<scalew;
-	break;
-      case 21:
-	wtae+=(knob[0]>>3);
-	break;
-      case 24:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+      case 6:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
 	instructionp=(*instructionsetplaguew[instruction%6]) (cells, instructionp);
 	insdir=dir;
 	if (cells[instructionp]==255 && dir<0) dir=1;
 	else if (cells[instructionp]==255 && dir>0) dir=-1; // barrier
 	break;
-      case 23:
-	  ptrr=(int *)0x005d;
-	  wtae=*ptrr<<scalew;
+      case 7:
+	//	  ptrr=(int *)0x005d;
+	//	  wtae=*ptrr<<scaler;
 	break;
-      case 22:
-	wtae=pgm_read_byte(&sinewave[x%255])<<scalew; // frequency
+      case 8:
+	wtae=pgm_read_byte(&sinewave[wtae%255])<<scaler; // frequency
 	break;
-      case 25:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetfirstw[instruction%20]) (ptrr, instructionp); // mistake before as was instruction%INSTLEN in last instance
+      case 9:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetfirstr[instruction%20]) (lsamp, instructionp); // mistake before as was instruction%INSTLEN in last instance
 	//      insdir=dir*(IP%16)+1; // prev mistake as just got exponentially larger
 	insdir=dir;
 	break;
-      case 26:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetbfw[instruction%8]) (ptrr, instructionp);
+      case 10:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetbfr[instruction%8]) (lsamp, instructionp);
 	insdir=dir;
 	    break;
-      case 27:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetSIRw[instruction%5]) (ptrr, instructionp);
+      case 11:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetSIRr[instruction%5]) (lsamp, instructionp);
 	insdir=dir;
 	break;
-      case 28:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetredcodew[instruction%10]) (ptrr, instructionp); 
+      case 12:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetredcoder[instruction%10]) (lsamp, instructionp); 
 	insdir=dir;
 	break;
-      case 29:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
+      case 13:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
 	wtae=instruction;
 	instructionp+=insdir;
 	break;
-      case 30:
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetreddeathw[instruction%7]) (ptrr, instructionp); 
+      case 14:
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetreddeathr[instruction%7]) (lsamp, instructionp); 
 	insdir=dir;
 	break;
-      case 31:
-	    //la biota
-	instruction=*(ptr+((cellhead+instructionp)%MAX_SAM));
-	instructionp=(*instructionsetbiotaw[instruction%9]) (ptrr, instructionp); 
+      case 15:
+	    //la biota ***FIX BTDIR***
+	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
+	wtae=instruction;
+	instructionp=(*instructionsetbiotar[instruction%9]) (lsamp, instructionp); 
 	if (btdir==0) instructionp+=1;
 	else if (btdir==1) instructionp-=1;
 	else if (btdir==2) instructionp+=16;
 	else if (btdir==3) instructionp-=16;
-      } 
-      //      oldwtae=wtae>>scalew; 
-  }
 
-  stepr=(knob[2]%8)+1;
-  if ((x%stepr)==0){
+      }
 
-    kn=knob[2]>>3;
-    //    	kn=0;
-    scaler=knob[4]%16;
-      switch(kn){ // to 32
+      switch(knn){
       case 0:
-	//	rtae=oldrtae<<scaler;
-	rtae++;
+	rtae+=scaler;
 	break;
       case 1:
 	runbrainr();
@@ -1614,145 +1515,91 @@ int main(void)
 	rtae=(ifs.returnvalx+1)<<scaler;
 	break;
       case 3:
-	rtae=runcell1d(cells,3,2)<<scaler;
+	rtae=runcell1d(lsamp,3,2)<<scaler;
 	break;
       case 4:
-	rtae=runcell1d(ptrr,3,2)<<scaler;
+	inittable(3,2,knob[4]); //radius,states(k),rule
+	rtae=runcell1d(lsamp,3,2)<<scaler;
 	break;
       case 5:
-	inittable(3,2,knob[4]); //radius,states(k),rule
-	rtae=runcell1d(cells,3,2)<<scaler;
-	break;
-      case 6:
-	rtae=runhodge(cells,newcells,q,k1,k2,g)<<scaler;
-	break;
-      case 7:
-	rtae=runhodge(ptrr,newcells,q,k1,k2,g)<<scaler;
-	break;
-      case 8:
-	rtae=runhodge(cells,newcells,q,k1,k2,knob[4]>>4)<<scaler;
-	break;
-      case 9:
-	rtae=runhodge(ptrr,newcells,knob[4],k1,k2,g)<<scaler;
-	break;
-      case 10:
-	rtae=runhodge(ptrr,newcells,q,k1,knob[4]>>6,g)<<scaler;
-	break;
-      case 11:
-	rtae=runhodge(cells,newcells,q,knob[4]>>6,k2,g)<<scaler;
-	break;
-      case 12:
 	runross(&ross);
 	rtae=ross.intz<<scaler;
 	break;
-      case 13:
-	rtae=runSIR(cells, newcells)<<scaler; 
-	swap = cells; cells = newcells; newcells = swap;
-	if (rtae==0)   initcell(cells,3,0,q+1);
-	break;
-      case 14:
-	rtae=runSIR(ptrr, newcells)<<scaler;
-	swap = ptrr; ptrr = newcells; newcells = swap;
-	break;
-      case 15:
-	rtae=runlife(cells, newcells)<<scaler;
-	swap = cells; cells = newcells; newcells = swap;
-	break;
-      case 16:
-	rtae=runlife(ptrr, newcells)<<scaler;
-	swap = ptrr; ptrr = newcells; newcells = swap;
-	break;
-      case 17: 
-	rtae=runcell(cells, low, high, rule)<<scaler;
-	break;
-      case 18:
-	rtae=runcell(ptrr, low, high, knob[4])<<scaler;
-	break;
-      case 19:
-	rtae=runorbit(knob[4])<<scaler;
-	break;
-      case 20:
-	rtae=*(ptrr)<<scaler;
-	break;
-      case 21:
-	rtae+=(knob[0]>>3);
-	break;
-      case 24:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
+      case 6:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
 	instructionpr=(*instructionsetplaguer[instruction%6]) (cells, instructionpr);
 	insdirr=dirr;
-	if (cells[instructionpr]==255 && dirr<0) dirr=1;
-	else if (cells[instructionpr]==255 && dirr>0) dirr=-1; // barrier
+	if (cells[instructionpr]==255 && dir<0) dir=1;
+	else if (cells[instructionpr]==255 && dir>0) dir=-1; // barrier
 	break;
-      case 23:
-	  ptrr=(int *)0x005d;
-	  rtae=*ptrr<<scaler;
+      case 7:
+	//	  ptrr=(int *)0x005d;
+	//	  rtae=*ptrr<<scaler;
 	break;
-      case 22:
+      case 8:
 	rtae=pgm_read_byte(&sinewave[rtae%255])<<scaler; // frequency
 	break;
-      case 25:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-	instructionpr=(*instructionsetfirstr[instruction%20]) (ptrr, instructionpr); // mistake before as was instruction%INSTLEN in last instance
+      case 9:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetfirstr[instruction%20]) (lsamp, instructionpr); // mistake before as was instruction%INSTLEN in last instance
 	//      insdir=dir*(IP%16)+1; // prev mistake as just got exponentially larger
 	insdirr=dirr;
 	break;
-      case 26:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-	instructionpr=(*instructionsetbfr[instruction%8]) (ptrr, instructionpr);
+      case 10:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetbfr[instruction%8]) (lsamp, instructionpr);
 	insdirr=dirr;
 	    break;
-      case 27:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-	instructionpr=(*instructionsetSIRr[instruction%5]) (ptrr, instructionpr);
+      case 11:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetSIRr[instruction%5]) (lsamp, instructionpr);
 	insdirr=dirr;
 	break;
-      case 28:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-	instructionpr=(*instructionsetredcoder[instruction%10]) (ptrr, instructionpr); 
+      case 12:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetredcoder[instruction%10]) (lsamp, instructionpr); 
 	insdirr=dirr;
 	break;
-      case 29:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
+      case 13:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
 	rtae=instruction;
 	instructionpr+=insdirr;
 	break;
-      case 30:
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-	instructionpr=(*instructionsetreddeathr[instruction%7]) (ptrr, instructionpr); 
+      case 14:
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetreddeathr[instruction%7]) (lsamp, instructionpr); 
 	insdir=dir;
 	break;
-      case 31:
+      case 15:
 	    //la biota ***FIX BTDIR***
-	instruction=*(ptr+((cellhead+instructionpr)%MAX_SAM));
-
-	instructionpr=(*instructionsetbiotar[instruction%9]) (ptrr, instructionpr); 
+	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
+	rtae=instruction;
+	instructionpr=(*instructionsetbiotar[instruction%9]) (lsamp, instructionpr); 
 	if (btdir==0) instructionpr+=1;
 	else if (btdir==1) instructionpr-=1;
 	else if (btdir==2) instructionpr+=16;
 	else if (btdir==3) instructionpr-=16;
       } 
-      //      oldrtae=rtae>>scaler; 
-	}
 
-  cli();
-  ADMUX = 0x61+kwhich;                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  knob[kwhich]=ADCH;
-  sei();
-  kwhich++;
-  kwhich%=7;
 
-  //alter so that overrides
-  //6 knob[0] 2-distortion choice/switchings (distort1/2/apply datagens/applyADC etc), other?
-  
-  /*if ((PIND & 0x02) == 0x02) dist=1;
-  else dist=0;
-  if ((PIND & 0x01) == 0x00) feedb=1;
-  else feedb=0;
-  */
-    
+
+
+    ADMUX = 0x61+kwhich;                
+    high(ADCSRA, ADSC); 
+    loop_until_bit_is_set(ADCSRA, ADIF);
+    knob[kwhich]=ADCH;
+    sei();
+    if (oldkn!=knob[5] || oldknn!=knob[1]) flagg=1;
+    oldkn=knob[5]; oldknn=knob[1];
+    kwhich++;
+    kwhich%=7;
+   
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
@@ -1767,80 +1614,8 @@ int main(void)
       low(PORTD, PD6);
       high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
     }
-  
-  
-  /*
-    distie=knob[0]%4;
-    //    distie=0;
-    switch(distie){
-  case 0: //usual
-  if (dist == 0) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
-  else {
-    PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
-  }
-  if (feedb == 1) {
-    high(PORTD,PD6);   // feedback - SW4 = PD6 
-    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
-  }
-  else 
-    {
-      low(PORTD, PD6);
-      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
-    }
-  break;
-  case 1:
-    //toggle distortion only
-  if ((wtae & 0x01) == 0x02 || dist==1)     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
-  else {
- PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
-  }
-  if (feedb==1) {
-    high(PORTD,PD6);   // feedback - SW4 = PD6 
-    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
-  }
-  else 
-    {
-      low(PORTD, PD6);
-      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
-    }
 
-    break;
-  case 2:
-    // toggle feedback only
-  if (dist == 0) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
-  else {
-    PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
-  }
 
-  if ((wtae & 0x01) == 0x00 || feedb==1) {
-    high(PORTD,PD6);   // feedback - SW4 = PD6 
-    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
-  }
-  else 
-    {
-      low(PORTD, PD6);
-      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
-    }
-
-    break;
-  case 3:
-    // toggle both
-  if ((rtae & 0x01) == 0x00 || dist==1)     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
-  else {
-    PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
-  }
-  if ((wtae & 0x01) == 0x00 || feedb==1) {
-    high(PORTD,PD6);   // feedback - SW4 = PD6 
-    low(PORTE,PE2);       // and disconnect PE0 - preamp to ADC = now PE2
-  }
-  else 
-    {
-      low(PORTD, PD6);
-      high(PORTE,PE2); // and connect PE0 - preamp to ADC = now PE2
-    }
-
-    }
-  */
 }
 
 }
