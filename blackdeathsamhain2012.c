@@ -3,24 +3,24 @@
 - new scheme:
 
 ///
-             -0-sample effect/stepr
+             -0-writegrain%/sample effect>>
 
 -3-wtae/scale              -2-rtae/scale
 
 -----------------------------
 
--5-start                  -1-end          -
+-5-start/wtaebac            -1-end/rtaebac          -
 
-             -4-grain size/stepw
+             -4-readgrain
 
 ///
 
 //new features on knobs????//REDO!!!
 
-knob5 and knob1 bottom left/right set to ZERO means dtae determines
-sample length
+and also add feedback on 4!
 
-knob4-bottommid <16 puts cellhead to dtae
+knob5 and knob1 bottom left/right set to ZERO means w/rtae determines
+sample length
 
 */
 #define samplerate 5000
@@ -64,7 +64,7 @@ unsigned char *cells, *newcells;
 int spointer, mpointer, prog;
 uint32_t tick, tween, place, readhead, writehead, cellhead;
 uint32_t maxsamp = MAX_SAM;
-uint32_t lsamp = 0;
+uint32_t lsamp = 0,rlsamp=0;
 uint32_t lowersamp = 0;
 ifss ifs;
 rosstype ross;
@@ -83,8 +83,8 @@ uint8_t kwhich,dist, oldknob ,oldkn,oldknn,kn,knn;
 uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;  
 
 
-volatile unsigned int chunk;
-uint32_t grainsize;
+volatile unsigned int chunk,rchunk;
+uint32_t grainsize,rgrainsize;
 
   uint8_t low, high, rule, accelerate;
   uint8_t celln[CELLLEN*CELLLEN];
@@ -155,23 +155,26 @@ void write_DAC(uint8_t data)
 }
 
 volatile unsigned char flagg,modrrr;
-volatile unsigned int i;
+volatile unsigned int i,ir;
 
 SIGNAL(TIMER1_COMPA_vect) {
-  unsigned char modrr, tempi; 
+  unsigned char modrr; 
 
-  grainsize=((knob[4]>>2)+1)<<modrrr;
-  //  grainsize=(grainsize++)%10;
+  grainsize=((knob[0]%64)+1)<<modrrr;
+  rgrainsize=((knob[4]>>2)+1)<<modrrr;
+  
   if (flagg==1){
-      maxsamp=(uint32_t)((knob[1]+2)*233);
-      lowersamp=(uint32_t)((knob[5]+1)*234);
+    maxsamp=(uint32_t)((knob[1]+2)*233);
+    if (knob[1]<4) maxsamp=MAX_SAM/wtae;
+    lowersamp=(uint32_t)((knob[5]+1)*234);
+    if (knob[5]<4) lowersamp=MAX_SAM/rtae;
       if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
       if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
       flagg=0; 
       tween=maxsamp-lowersamp;
   }
 
-  i++;
+  i++; ir++;
   if (i>=grainsize) {
     chunk+=grainsize;
     if (chunk>=tween) chunk=tween-chunk;
@@ -179,8 +182,17 @@ SIGNAL(TIMER1_COMPA_vect) {
     lsamp=0x1100+lowersamp+chunk;
     i=0;
   }
+
+  if (ir>=rgrainsize) {
+    rchunk+=rgrainsize;
+    if (rchunk>=tween) rchunk=tween-rchunk;
+    if (rchunk>tween) rchunk=0;
+    rlsamp=0x1100+lowersamp+rchunk;
+    ir=0;
+  }
+
   
-  modrr=knob[0]>>5;
+  modrr=knob[0]>>6;
   switch(modrr){
   case 0:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -194,42 +206,17 @@ SIGNAL(TIMER1_COMPA_vect) {
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) ADCH<<rtae;
+  *xramptr = (unsigned char) ADCH&rtae;
     break;
   case 2:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) ADCH|rtae;
-    break;
-  case 3:
-  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%grainsize));
-  break;
-  case 4:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) ADCH^rtae;
-    break;
-  case 5:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) ADCH&rtae;
-  break;
-  case 6:
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) rtae;
     break;
-  case 7:
+  case 3:
     xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
     // leave as it is!
   }
-  xramptr = (unsigned char *)(lsamp+(rtae%grainsize));
+  xramptr = (unsigned char *)(rlsamp+(rtae%rgrainsize));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
   while(!(SPSR & (1<<SPIF)));	// Wait for SPI transmission complete
@@ -1175,11 +1162,19 @@ unsigned char munge(unsigned char* cellies, unsigned int ink, unsigned int param
 unsigned char coded(unsigned char* cellies, unsigned int ink, unsigned int param){
   ptr=(int *)0x005d;
   return(*ptr<<param);
+  }
+
+
+unsigned char wredo(unsigned char* cellies, unsigned int ink, unsigned int param){
+  grainsize=ink;
+  return ink<<param;
 }
 
-unsigned char redo(unsigned char* cellies, unsigned int ink, unsigned int param){
-  return(*cellies<<param);
+unsigned char rredo(unsigned char* cellies, unsigned int ink, unsigned int param){
+  rgrainsize=ink;
+  return ink<<param;
 }
+
 
 unsigned char non(unsigned char* cellies, unsigned int ink, unsigned int param){
   return 0;
@@ -1331,8 +1326,8 @@ int main(void)
   uint8_t stepr=1, stepw=1;
 
 
-  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy,swappy,cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,redo,non};
-  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,redo,non}; //31 so far (need 1 more!)
+  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy,swappy,cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,wredo,non};
+  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,rredo,non}; //31 so far (need 1 more!)
 
   instructionp=0; insdir=1; dir=1; btdir=0; dcdir=0;
   instructionpr=0; insdirr=1; dirr=1; btdirr=0; dcdirr=0;
@@ -1373,9 +1368,9 @@ int main(void)
   sei();
   
   for(;;){
-    x++;
-    stepr=knob[0]%16;
-    stepw=knob[4]%16;
+    //    x++;
+    //    stepr=knob[0]%16;
+    //    stepw=knob[4]%16;
     scalew=knob[3]%8;
     scaler=knob[2]%8;
     kn=knob[3]>>3;
@@ -1383,8 +1378,9 @@ int main(void)
     //    kn=24;knn=1;
 
     
-    if ((x%stepw)==0) wtae=(*wplag[kn])((unsigned char*)lsamp,wtae,scalew);
-    if ((x%stepr)==0) rtae=(*rplag[knn])((unsigned char*)lsamp,rtae,scaler);
+    wtae=(*wplag[kn])((unsigned char*)lsamp,wtae,scalew);
+    //if ((x%stepr)==0) rtae=(*rplag[knn])((unsigned char*)lsamp,rtae,scaler);
+    rtae=(*rplag[knn])((unsigned char*)lsamp,rtae,scaler);
     cli();
 
     ADMUX = 0x61+kwhich;                
@@ -1396,7 +1392,8 @@ int main(void)
     oldkn=knob[5]; oldknn=knob[1];
     kwhich++;
     kwhich%=7;
-   
+
+
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
     PORTD=(PORTD&0x43)+0x28;   // distortion through - SW1/3 = PD3/5 HIGH
