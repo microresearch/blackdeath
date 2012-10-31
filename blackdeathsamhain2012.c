@@ -2,6 +2,8 @@
 
 /// model so far is kind of OK...
 
+crash!!!
+
 - function pointers instead of switch with more manipulations...
 - test/redo SIR, hodge, cel, life
 
@@ -12,7 +14,7 @@
 ///
              -0-sample effect/what else?
 
--3-wtae                   -2-rtae
+-3-wtae/scale              -2-rtae/scale
 
 -----------------------------
 
@@ -32,7 +34,7 @@ sample length
 knob4-bottommid <16 puts cellhead to dtae
 
 */
-#define samplerate 5000
+#define samplerate 8000
 #define F_CPU 16000000UL 
 #define true 1
 #define false 0
@@ -77,26 +79,33 @@ uint32_t lsamp = 0;
 uint32_t lowersamp = 0;
 ifss ifs;
 rosstype ross;
-volatile long rtae; // ????
-volatile long wtae; // ????
+volatile uint32_t rtae; // ????
+volatile uint32_t wtae; // ????
 
-long oldrtae; // ????
-long oldwtae;
+//long oldrtae; // ????
+//long oldwtae;
 unsigned char datagen, effect, weff, wrambank,rrambank;
 volatile unsigned char *xramptr;
 volatile unsigned char knob[6] = {0, 0, 0, 0, 0, 0};
 
 uint8_t *swap;
 volatile uint8_t swapping;
-uint8_t kwhich,dist, oldknob ,oldkn,oldknn;
+uint8_t kwhich,dist, oldknob ,oldkn,oldknn,kn,knn;
 uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;  
 
 
 unsigned int chunk;
-unsigned int grainsize;
+uint32_t grainsize;
+
+  uint8_t low, high, rule, accelerate;
+  uint8_t celln[CELLLEN*CELLLEN];
+  uint8_t cellx[CELLLEN*CELLLEN];
+  uint8_t scaler,scalew; 
+  uint8_t k1,k2,q,g;
 
                                                                        
-uint8_t k = 128;                                                                           int lenny=CELLLEN*CELLLEN;
+uint8_t k = 128;
+int lenny=CELLLEN*CELLLEN;
 double ax[starcount];
 double ay[starcount];
 double az[starcount];
@@ -156,30 +165,26 @@ void write_DAC(uint8_t data)
   high(PORTB, CYWM_nSS);
 }
 
-unsigned char flagg;
+volatile unsigned char flagg;
+volatile unsigned int i;
 
 SIGNAL(TIMER1_COMPA_vect) {
-  unsigned char modrr; static unsigned int i=0;
-  grainsize=knob[4]+1;
- 
+  unsigned char modrr, tempi; 
+
+  grainsize=(knob[4]>>2)+1;
+  //  grainsize=(grainsize++)%10;
   if (flagg==1){
-    //  if (oldkn!=knob[5] || oldknn!=knob[1]){
-
-  maxsamp=(uint32_t)((knob[1]+2)*233);
-  //      if (knob[1]<4) maxsamp=MAX_SAM/wtae;
-  lowersamp=(uint32_t)((knob[5]+1)*234);
-  //      if (knob[5]<4) lowersamp=MAX_SAM/rtae;
-
-  if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
-  if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
-  tween=maxsamp-lowersamp;
-  //lsamp=0x1100+lowersamp;
-  flagg=0;
+      maxsamp=(uint32_t)((knob[1]+2)*233);
+      lowersamp=(uint32_t)((knob[5]+1)*234);
+      if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
+      if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
+      flagg=0; 
+      tween=maxsamp-lowersamp;
   }
 
   i++;
-    if (i>=grainsize) {
-      chunk+=grainsize;
+  if (i>=grainsize) {
+    chunk+=grainsize;
     if (chunk>=tween) chunk=tween-chunk;
     if (chunk>tween) chunk=0;
     lsamp=0x1100+lowersamp+chunk;
@@ -187,7 +192,6 @@ SIGNAL(TIMER1_COMPA_vect) {
   }
   
   modrr=knob[0]>>5;
-  //  modrr=0;
   switch(modrr){
   case 0:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -210,13 +214,10 @@ SIGNAL(TIMER1_COMPA_vect) {
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH|rtae;
     break;
-  case 7:
-    // leave as it is!
-    break;
-  case 6:
+  case 3:
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) rtae;
-    break;
+  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%grainsize));
+  break;
   case 4:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
@@ -231,11 +232,14 @@ SIGNAL(TIMER1_COMPA_vect) {
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
   *xramptr = (unsigned char) ADCH&rtae;
   break;
-  case 3:
+  case 6:
   xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
-  *xramptr = (unsigned char) *(unsigned char *)(lsamp+(rtae%grainsize));
+  *xramptr = (unsigned char) rtae;
+    break;
+  case 7:
+    xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
+    // leave as it is!
   }
-  
   xramptr = (unsigned char *)(lsamp+(rtae%grainsize));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -829,9 +833,9 @@ void ioinit(void)
 
 void adc_init(void)
 {
-  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
-  //    ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
-    ADCSRA = (1 << ADPS2); // /16
+  //  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
+  // ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
+      ADCSRA = (1 << ADPS2); // /16
   //  ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
   ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
   ADCSRA |= (1 << ADEN) ;
@@ -857,333 +861,44 @@ void initross(rosstype* ross){
   ross->step=1;
 }
 
-void runross(rosstype* ross){
-  double lx0,ly0,lz0,lx1,ly1,lz1;
-  double h,a,b,c;
+  // ops: ++,-,&,|,division, *, bitshifts << >>
 
-  h = ross->h;
-  a = ross->a;
-  b = ross->b;
-  c = ross->c;
-  lx0 = ross->lx0;
-  ly0 = ross->ly0;
-  lz0 = ross->lz0;
-  lx1 = lx0 + h * (-ly0 - lz0);
-  ly1 = ly0 + h * (lx0 + (a * ly0));
-  lz1 = lz0 + h * (b + (lx0*lz0) - (c * lz0));;
-  ross->lx0 = lx1;
-  ross->ly0 = ly1;
-  ross->lz0 = lz1;
-  //  ross->intx=(signed int)((float)lx1*1024)%1024;
-  //  ross->inty=(signed int)((float)ly1*1024)%1024;
-  ross->intz=(signed int)((float)lz1*1024)%1024;
-}
+unsigned char inc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink+=param;}
 
-void runbrainr(void){
-  unsigned char *xxx; int kl=0;
+unsigned char dec(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink-=param;}
 
-  // should also be able to move these around
+unsigned char andy(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink&=param;}
 
-  spointer++; 
-  if (spointer==0) spointer=MAX_SAM;
-  if (mpointer==0) mpointer=MAX_SAM;
-  if (spointer>MAX_SAM) spointer=0;
-  if (mpointer>MAX_SAM) mpointer=0;
+unsigned char orry(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink|=param;}
 
-  xxx=((unsigned char *)(0x1100+spointer));
-  prog=*xxx%8;
-  switch(prog) {
-    /* Increment pointer value */
-  case 0:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=*xxx+1;
-    break;
-    /* Decrement pointer value */
-  case 1:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=*xxx-1;
-    break;
-    /* Increment pointer */
-  case 2:
-    mpointer++;
-    break;
-    /* Decrement pointer */
-  case 3:
-    mpointer--;
-    break;
-    /* Print current pointer value */
-  case 4:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    rtae=*xxx;
-    break;
-    /* Read value and store in current pointer */
-  case 5:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=rtae;
-    break;
-    /* Start loop */
-  case 6:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    if (*xxx == 0) {
-      /* Find matching ] */
-      spointer++;
-      if (spointer>MAX_SAM) spointer=0;
+unsigned char excy(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink^=param;}
 
-      /* If kl == 0 and space[pointer] == ']' we found
-       * the matching brace */
+unsigned char divvy(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink/=param;}
 
-      xxx=((unsigned char *)(0x1100+spointer));
-      while (kl > 0 || (*xxx)%8 != 7)
-	{
-	  if ((*xxx)%8 == 6) kl++;
-	  if ((*xxx)%8 == 7) kl--;
-	  /* Go in right direction */
-	  spointer++;
-	  if (spointer>MAX_SAM) spointer=0;
-	  xxx=((unsigned char *)(0x1100+spointer));
-	}
-    }
-    break;
-    /* End loop */
-  case 7:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    if (*xxx != 0) { // a fix
-      /* Find matching [ */
-      spointer--;
-      if (spointer==0) spointer=MAX_SAM;
-      xxx=((unsigned char *)(0x1100+spointer));
+unsigned char starry(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink*=param;}
 
-      while (kl > 0 || (*xxx)%8 != 6) {
-	if ((*xxx)%8 == 6) kl--;
-	if ((*xxx)%8 == 7) kl++;
-	/* Go left */
-	spointer--;
-	if (spointer==0) spointer=MAX_SAM;
-	xxx=((unsigned char *)(0x1100+spointer));
-      }
-      spointer--;
-      if (spointer==0) spointer=MAX_SAM;
-    }
-    break;
-  }
-}
+unsigned char lefty(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink<<=param;}
 
-void runbrainw(void){
-  unsigned char *xxx; int kl=0;
-
-  // should also be able to move these around
-
-  spointer++; 
-  if (spointer==0) spointer=MAX_SAM;
-  if (mpointer==0) mpointer=MAX_SAM;
-  if (spointer>MAX_SAM) spointer=0;
-  if (mpointer>MAX_SAM) mpointer=0;
-
-  xxx=((unsigned char *)(0x1100+spointer));
-  prog=*xxx%8;
-  switch(prog) {
-    /* Increment pointer value */
-  case 0:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=*xxx+1;
-    break;
-    /* Decrement pointer value */
-  case 1:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=*xxx-1;
-    break;
-    /* Increment pointer */
-  case 2:
-    mpointer++;
-    break;
-    /* Decrement pointer */
-  case 3:
-    mpointer--;
-    break;
-    /* Print current pointer value */
-  case 4:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    wtae=*xxx;
-    break;
-    /* Read value and store in current pointer */
-  case 5:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    *xxx=wtae;
-    break;
-    /* Start loop */
-  case 6:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    if (*xxx == 0) {
-      /* Find matching ] */
-      spointer++;
-      if (spointer>MAX_SAM) spointer=0;
-
-      /* If kl == 0 and space[pointer] == ']' we found
-       * the matching brace */
-
-      xxx=((unsigned char *)(0x1100+spointer));
-      while (kl > 0 || (*xxx)%8 != 7)
-	{
-	  if ((*xxx)%8 == 6) kl++;
-	  if ((*xxx)%8 == 7) kl--;
-	  /* Go in right direction */
-	  spointer++;
-	  if (spointer>MAX_SAM) spointer=0;
-	  xxx=((unsigned char *)(0x1100+spointer));
-	}
-    }
-    break;
-    /* End loop */
-  case 7:
-    xxx=((unsigned char *)(0x1100+mpointer));
-    if (*xxx != 0) { // a fix
-      /* Find matching [ */
-      spointer--;
-      if (spointer==0) spointer=MAX_SAM;
-      xxx=((unsigned char *)(0x1100+spointer));
-
-      while (kl > 0 || (*xxx)%8 != 6) {
-	if ((*xxx)%8 == 6) kl--;
-	if ((*xxx)%8 == 7) kl++;
-	/* Go left */
-	spointer--;
-	if (spointer==0) spointer=MAX_SAM;
-	xxx=((unsigned char *)(0x1100+spointer));
-      }
-      spointer--;
-      if (spointer==0) spointer=MAX_SAM;
-    }
-    break;
-  }
-}
+unsigned char righty(unsigned char* cellies, unsigned int ink, unsigned int param){
+  return ink>>=param;}
 
 
-void initifs(ifss* ifs){
-  int i,iter;
-  int column = 6, row = 4;
-  ifs->step=1;         
-  ifs->ifscount=0;
-  ifs->prob[0]=0.0;
-  ifs->prob[1]=0.85; 
-  ifs->prob[2]=0.92; 
-  ifs->prob[3]=0.99; 
-  ifs->prob[4]=1.0; 
-  ifs->p1.x=0.1;
-  ifs->p1.y=0.1;         
-                         
-  for (iter=0;iter<row;iter++){
-    for (i=0;i<column;i++){
-      iter=rand()%row;
-      i=rand()%column;
-      ifs->coeff[iter][i]=((double)rand()/(double)(RAND_MAX));
-      if (((double)rand()/(double)(RAND_MAX))>0.5) ifs->coeff[iter][i]= ifs->coeff[iter][i]-1;
-      ifs->prob[iter]=((double)rand()/(double)(RAND_MAX));
-    }
-  }
-}
-
-void runifs(ifss* ifs){
-  double random_num;
-  int iter,i;
-  int column = 6, row = 4;
-
-  ifs->ifscount++;
-  random_num = (double)rand()/(double)(RAND_MAX);
-  for(i = 0; i < row; i++){
-    if ( BET(random_num,ifs->prob[i],ifs->prob[i+1]) ){
-      ifs->p2.x = ifs->coeff[i][0]*ifs->p1.x + ifs->coeff[i][1]*ifs->p1.y + ifs->coeff[i][4];
-      ifs->p2.y = ifs->coeff[i][2]*ifs->p1.x + ifs->coeff[i][3]*ifs->p1.y + ifs->coeff[i][5];
-      break;
-    }
-  }
-  ifs->p1=ifs->p2;  
-					
-  if (ifs->p2.x>0.0)
-    ifs->returnvalx=(int)((ifs->p2.x)*1024);
-  if (ifs->p2.y>0.0)
-    ifs->returnvaly=(int)((ifs->p2.y)*1024);
-
-  if (ifs->ifscount>NSTEPS) {
-    iter=rand()%row;
-    i=rand()%column;
-    ifs->coeff[iter][i]=((double)rand()/(double)(RAND_MAX));
-    if (((double)rand()/(double)(RAND_MAX))>0.5) ifs->coeff[iter][i]= ifs->coeff[iter][i]-1;
-    ifs->prob[iter]=((double)rand()/(double)(RAND_MAX));
-    ifs->p1.x=0.5;
-    ifs->p1.y=0.5;
-  }
-}
-
-unsigned char *table;
-
-// second automata based on dewdney
-
-void inittable(unsigned char r, unsigned char k, int rule){
-  int max, z, summ;
-
-  free(table);
-  max = (k-1)*((r*2)+1);
-  table= (unsigned char *)malloc(max+1);
-  for (z=max;z>=0;z--){
-    summ=0;
-    while ((rule-pow(k,z))>=0) {
-      summ++;
-      rule=rule-pow(k,z);
-    }
-    if (summ>=1) {
-      table[z]=summ;
-    }
-    else table[z]=0;
-  }
-}
-
-int runcell1d(unsigned char *cells,unsigned char radius, unsigned char k){
-
-  static unsigned char l=0; unsigned char cell; int sum,ssum,z,zz;
-
-  l++; ssum=0;
-  l%=CELLLEN;
-  for (cell = 0; cell < CELLLEN; cell++){ 
-    sum=0;
-    // sum of cells in radius 
-    for (z=-radius;z<radius;z++){
-      zz=cell+z;
-      if (zz>=CELLLEN) zz=zz-CELLLEN;
-      if (zz<0) zz=CELLLEN+zz;
-      sum+=cells[zz+(l*CELLLEN)]%k;
-    }
-    cells[cell+(((l+1)%CELLLEN)*CELLLEN)]= table[sum]; 
-    ssum+=sum;
-  }
-  return ssum;
-}
-
-void initcell(unsigned char *cells, uint8_t param, int redhead, uint8_t topval){
-  int y;
-  unsigned char *ptr;
-  
-  for (y=0;y<lenny;y++){
-    //    cells[y] = malloc(sizeof(uint8_t *) * CELLLEN);
-    //    newcells[y] = malloc(sizeof(uint8_t *) * CELLLEN);
-    if (param==2){
-      ptr = (unsigned char *)(0x1100+(redhead+y)%MAX_SAM); // ??? go over limit?
-      cells[y]=*ptr;
-    }
-	
-    else if (param==1) cells[y]=rand()%topval; //*ptr;  
-    else if (param==3) cells[y]=rand()%(topval-2) + 2;            
-    else if (param==0) cells[y]=0;
-  }
-}
-
-void hodge(unsigned char* cellies){
+unsigned char hodge(unsigned char* cellies, unsigned int wr, unsigned int param){
   int sum=0, numill=0, numinf=0;
   unsigned char q,k1,k2,g;
   static unsigned char x=CELLLEN+1;
   static unsigned char flag=0;
   unsigned char *newcells, *cells;
 
-  if (flag&0x01==0) {
+  if ((flag&0x01)==0) {
     cells=cellies; newcells=&cells[chunk/2];
   }
   else {
@@ -1220,9 +935,10 @@ void hodge(unsigned char* cellies){
     x=CELLLEN+1;
     flag^=0x01;
   }
+  return sum;
 }
 
-void cel(unsigned char* cells){
+unsigned char cel(unsigned char* cells, unsigned int wr, unsigned int param){
 
   static unsigned char l=0; unsigned char cell, state, res;
   unsigned char rule=cells[0];
@@ -1249,13 +965,13 @@ void cel(unsigned char* cells){
   }
 }
 
-void SIR(unsigned char* cellies){
+unsigned char SIR(unsigned char* cellies, unsigned int wr, unsigned int param){
   unsigned char cell,x,sum=0;
   static unsigned char flag=0;
   unsigned char *newcells, *cells;
   unsigned char kk=cellies[0], p=cellies[1];
 
-  if (flag&0x01==0) {
+  if ((flag&0x01)==0) {
     cells=cellies; newcells=&cells[chunk/2];
   }
   else {
@@ -1270,7 +986,7 @@ void SIR(unsigned char* cellies){
       newcells[x]++;                                                       
     }
     else if (cell == susceptible) {   
-                                                 
+      sum++;                                    
       if ( (cells[x-CELLLEN]>0 && cells[x-CELLLEN]<kk) ||
 	   (cells[x+CELLLEN]>0 && cells[x+CELLLEN]<kk) ||
 	   (cells[x-1]>0 && cells[x-1]<kk) ||
@@ -1281,15 +997,16 @@ void SIR(unsigned char* cellies){
     }
   }
   flag^=0x01;
+  return sum;
 }
 
-void life(unsigned char* cellies){
+unsigned char life(unsigned char* cellies, unsigned int wr, unsigned int param){
   unsigned char x, sum;
 
   static unsigned char flag=0;
   unsigned char *newcells, *cells;
 
-  if (flag&0x01==0) {
+  if ((flag&0x01)==0) {
     cells=cellies; newcells=&cells[chunk/2];
   }
   else {
@@ -1305,14 +1022,7 @@ void life(unsigned char* cellies){
   
   // swapping 
   flag^=0x01;
-}
-
-void mutate(unsigned char* cells){
-  unsigned char x,y;
-  for (y=0;y<cells[0];y++){
-    x=cells[y+1];
-  cells[x]^=(x&0x0f);
-  }
+  return sum;
 }
 
 
@@ -1320,13 +1030,6 @@ int main(void)
 {
   unsigned char x=0, distie, dist,feedb;
   uint8_t stepr=1, stepw=1;
-  uint8_t scaler,scalew; 
-  uint8_t k1,k2,q,g,kn,knn;
-  uint8_t low, high, rule, accelerate;
-  uint8_t celln[lenny];
-  uint8_t cellx[lenny];
-  cells=celln;
-  newcells=cellx;
 
   // 7 sets
 
@@ -1360,7 +1063,10 @@ int main(void)
 
   unsigned char (*instructionsetreddeathr[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclockr,redrooms,redunmask,redprosperor,redoutside}; // 7
 
+  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,cel,SIR,life};
+  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,cel,SIR,life}; //13 so far
 
+  // so port all the datagens, test, + usual suspects:
 
   instructionp=0; insdir=1; dir=1; btdir=0; dcdir=0;
   instructionpr=0; insdirr=1; dirr=1; btdirr=0; dcdirr=0;
@@ -1395,10 +1101,10 @@ int main(void)
 
   // datagens
 
-  initross(&ross);
-  initifs(&ifs);
-  initcell(cells,3,0,q+1);
-  inittable(3,2,41); //radius,states(k),rule
+  //  initross(&ross);
+  //  initifs(&ifs);
+  //  initcell(cells,3,0,q+1);
+  //  inittable(3,2,41); //radius,states(k),rule
   //  initorbit();
 
   rule=39;
@@ -1410,186 +1116,13 @@ int main(void)
 
     scalew=knob[3]%8;
     scaler=knob[2]%8;
-    scalew=1;
-    scaler=1;
     kn=knob[3]>>4;
     knn=knob[2]>>4;
+    kn=1;knn=11;
+    wtae=(*wplag[kn])(lsamp,wtae,scalew);
+    rtae=(*rplag[knn])(lsamp,rtae,scaler);
+
     cli();
-
-      switch(kn){ // to 32
-      case 0:
-	wtae+=scalew;
-	break;
-      case 1:
-	runbrainw();
-	wtae=spointer<<scalew;
-	break;
-      case 2:
-	runifs(&ifs);
-	wtae=(ifs.returnvalx+1)<<scalew;
-	break;
-      case 3:
-	wtae=runcell1d(lsamp,3,2)<<scalew;
-	break;
-      case 4:
-	inittable(3,2,knob[0]); //radius,states(k),rule
-	wtae=runcell1d(lsamp,3,2)<<scalew;
-	break;
-      case 5:
-	runross(&ross);
-	wtae=ross.intz<<scalew;
-	break;
-      case 6:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetplaguew[instruction%6]) (cells, instructionp);
-	insdir=dir;
-	if (cells[instructionp]==255 && dir<0) dir=1;
-	else if (cells[instructionp]==255 && dir>0) dir=-1; // barrier
-	break;
-      case 7:
-	//	  ptrr=(int *)0x005d;
-	//	  wtae=*ptrr<<scaler;
-	break;
-      case 8:
-	wtae=pgm_read_byte(&sinewave[wtae%255])<<scaler; // frequency
-	break;
-      case 9:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetfirstr[instruction%20]) (lsamp, instructionp); // mistake before as was instruction%INSTLEN in last instance
-	//      insdir=dir*(IP%16)+1; // prev mistake as just got exponentially larger
-	insdir=dir;
-	break;
-      case 10:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetbfr[instruction%8]) (lsamp, instructionp);
-	insdir=dir;
-	    break;
-      case 11:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetSIRr[instruction%5]) (lsamp, instructionp);
-	insdir=dir;
-	break;
-      case 12:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetredcoder[instruction%10]) (lsamp, instructionp); 
-	insdir=dir;
-	break;
-      case 13:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp+=insdir;
-	break;
-      case 14:
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetreddeathr[instruction%7]) (lsamp, instructionp); 
-	insdir=dir;
-	break;
-      case 15:
-	    //la biota ***FIX BTDIR***
-	instruction=(unsigned char *)(lsamp+(instructionp%grainsize));
-	wtae=instruction;
-	instructionp=(*instructionsetbiotar[instruction%9]) (lsamp, instructionp); 
-	if (btdir==0) instructionp+=1;
-	else if (btdir==1) instructionp-=1;
-	else if (btdir==2) instructionp+=16;
-	else if (btdir==3) instructionp-=16;
-
-      }
-
-      switch(knn){
-      case 0:
-	rtae+=scaler;
-	break;
-      case 1:
-	runbrainr();
-	rtae=spointer<<scaler;
-	break;
-      case 2:
-	runifs(&ifs);
-	rtae=(ifs.returnvalx+1)<<scaler;
-	break;
-      case 3:
-	rtae=runcell1d(lsamp,3,2)<<scaler;
-	break;
-      case 4:
-	inittable(3,2,knob[4]); //radius,states(k),rule
-	rtae=runcell1d(lsamp,3,2)<<scaler;
-	break;
-      case 5:
-	runross(&ross);
-	rtae=ross.intz<<scaler;
-	break;
-      case 6:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetplaguer[instruction%6]) (cells, instructionpr);
-	insdirr=dirr;
-	if (cells[instructionpr]==255 && dir<0) dir=1;
-	else if (cells[instructionpr]==255 && dir>0) dir=-1; // barrier
-	break;
-      case 7:
-	//	  ptrr=(int *)0x005d;
-	//	  rtae=*ptrr<<scaler;
-	break;
-      case 8:
-	rtae=pgm_read_byte(&sinewave[rtae%255])<<scaler; // frequency
-	break;
-      case 9:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetfirstr[instruction%20]) (lsamp, instructionpr); // mistake before as was instruction%INSTLEN in last instance
-	//      insdir=dir*(IP%16)+1; // prev mistake as just got exponentially larger
-	insdirr=dirr;
-	break;
-      case 10:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetbfr[instruction%8]) (lsamp, instructionpr);
-	insdirr=dirr;
-	    break;
-      case 11:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetSIRr[instruction%5]) (lsamp, instructionpr);
-	insdirr=dirr;
-	break;
-      case 12:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetredcoder[instruction%10]) (lsamp, instructionpr); 
-	insdirr=dirr;
-	break;
-      case 13:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr+=insdirr;
-	break;
-      case 14:
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetreddeathr[instruction%7]) (lsamp, instructionpr); 
-	insdir=dir;
-	break;
-      case 15:
-	    //la biota ***FIX BTDIR***
-	instruction=(unsigned char *)(lsamp+(instructionpr%grainsize));
-	rtae=instruction;
-	instructionpr=(*instructionsetbiotar[instruction%9]) (lsamp, instructionpr); 
-	if (btdir==0) instructionpr+=1;
-	else if (btdir==1) instructionpr-=1;
-	else if (btdir==2) instructionpr+=16;
-	else if (btdir==3) instructionpr-=16;
-      } 
-
-
-
-
     ADMUX = 0x61+kwhich;                
     high(ADCSRA, ADSC); 
     loop_until_bit_is_set(ADCSRA, ADIF);
