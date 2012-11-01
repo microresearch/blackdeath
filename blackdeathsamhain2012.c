@@ -1,26 +1,21 @@
 /*
 
-- new scheme:
+//
+
+TODO:
+
+- fix crashes!
 
 ///
-             -0-writegrain%/sample effect>>
+             -0-writegrain
 
 -3-wtae/scale              -2-rtae/scale
 
------------------------------
-
--5-start/wtaebac            -1-end/rtaebac          -
+-5-start                   -1-end
 
              -4-readgrain
 
 ///
-
-//new features on knobs????//REDO!!!
-
-and also add feedback on 4!
-
-knob5 and knob1 bottom left/right set to ZERO means w/rtae determines
-sample length
 
 */
 #define samplerate 5000
@@ -154,24 +149,26 @@ void write_DAC(uint8_t data)
   high(PORTB, CYWM_nSS);
 }
 
-volatile unsigned char flagg,modrrr;
-volatile unsigned int i,ir;
+volatile unsigned char flagg;
+unsigned int modrrr,modrr;
+unsigned char i,ir;
 
 SIGNAL(TIMER1_COMPA_vect) {
-  unsigned char modrr; 
 
-  grainsize=((knob[0]%64)+1)<<modrrr;
-  rgrainsize=((knob[4]>>2)+1)<<modrrr;
-  
+  grainsize=(knob[0]>>2)<<modrrr;
+  rgrainsize=(knob[4]>>2)<<modrrr;
+  //  grainsize=1;
+  if (knob[0]==0) grainsize=wtae+1;
+  if (knob[4]==0) rgrainsize=rtae+1;
   if (flagg==1){
     maxsamp=(uint32_t)((knob[1]+2)*233);
-    if (knob[1]<4) maxsamp=MAX_SAM/wtae;
+    if (knob[1]==0) maxsamp=wtae*233;
     lowersamp=(uint32_t)((knob[5]+1)*234);
-    if (knob[5]<4) lowersamp=MAX_SAM/rtae;
-      if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
-      if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
-      flagg=0; 
-      tween=maxsamp-lowersamp;
+    if (knob[5]==0) lowersamp=wtae*234;
+    if (maxsamp>MAX_SAM || maxsamp<0) maxsamp=MAX_SAM;
+    if (lowersamp>MAX_SAM || lowersamp<0 || lowersamp>=maxsamp) lowersamp=1;
+    flagg=0; 
+    tween=maxsamp-lowersamp;
   }
 
   i++; ir++;
@@ -191,8 +188,8 @@ SIGNAL(TIMER1_COMPA_vect) {
     ir=0;
   }
 
-  
-  modrr=knob[0]>>6;
+  //        modrr=1;  
+  //  modrr=knob[0]>>6;
   switch(modrr){
   case 0:
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -215,7 +212,8 @@ SIGNAL(TIMER1_COMPA_vect) {
   case 3:
     xramptr = (unsigned char *)(lsamp+(wtae%grainsize));
     // leave as it is!
-  }
+    }
+
   xramptr = (unsigned char *)(rlsamp+(rtae%rgrainsize));
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -1012,8 +1010,8 @@ void ioinit(void)
 void adc_init(void)
 {
   //  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
-  // ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
-      ADCSRA = (1 << ADPS2); // divide/16
+     ADCSRA = (1 << ADPS2) | (1<< ADPS1) ; //= 64 - very clean
+  //        ADCSRA = (1 << ADPS2); // divide/16
   //  ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
   ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
   ADCSRA |= (1 << ADEN) ;
@@ -1035,6 +1033,39 @@ unsigned char inc(unsigned char* cellies, unsigned int ink, unsigned int param){
 
 unsigned char dec(unsigned char* cellies, unsigned int ink, unsigned int param){
   return ink-param;}
+
+unsigned char inca(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=0;
+  return ink+param;}
+
+unsigned char deca(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=0;
+  return ink-param;}
+
+unsigned char incb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=1;
+  return ink+param;}
+
+unsigned char decb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=1;
+  return ink-param;}
+
+unsigned char incc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=2;
+  return ink+param;}
+
+unsigned char decc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=2;
+  return ink-param;}
+
+unsigned char incd(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=3;
+  return ink+param;}
+
+unsigned char decd(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=3;
+  return ink-param;}
+
 
 unsigned char andy(unsigned char* cellies, unsigned int ink, unsigned int param){
   return ink&=param;}
@@ -1062,8 +1093,56 @@ unsigned char rossy(unsigned char* cellies, unsigned int ink, unsigned int param
   return ross.intz<<param;
 }
 
+unsigned char rossya(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runross(&ross);
+  modrr=0;
+  return ross.intz<<param;
+}
+
+unsigned char rossyb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runross(&ross);
+  modrr=1;
+  return ross.intz<<param;
+}
+
+unsigned char rossyc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runross(&ross);
+  modrr=2;
+  return ross.intz<<param;
+}
+
+unsigned char rossyd(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runross(&ross);
+  modrr=3;
+  return ross.intz<<param;
+}
+
 unsigned char ifsy(unsigned char* cellies, unsigned int ink, unsigned int param){
   runifs(&ifs);
+  return (ifs.returnvalx+1)<<param;
+}
+
+unsigned char ifsya(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runifs(&ifs);
+  modrr=0;
+  return (ifs.returnvalx+1)<<param;
+}
+
+unsigned char ifsyb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runifs(&ifs);
+  modrr=1;
+  return (ifs.returnvalx+1)<<param;
+}
+
+unsigned char ifsyc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runifs(&ifs);
+  modrr=2;
+  return (ifs.returnvalx+1)<<param;
+}
+
+unsigned char ifsyd(unsigned char* cellies, unsigned int ink, unsigned int param){
+  runifs(&ifs);
+  modrr=3;
   return (ifs.returnvalx+1)<<param;
 }
 
@@ -1177,6 +1256,27 @@ unsigned char rredo(unsigned char* cellies, unsigned int ink, unsigned int param
 
 
 unsigned char non(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=0;
+  return 0;
+}
+
+unsigned char nona(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=0;
+  return 0;
+}
+
+unsigned char nonb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=1;
+  return 0;
+}
+
+unsigned char nonc(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=2;
+  return 0;
+}
+
+unsigned char nond(unsigned char* cellies, unsigned int ink, unsigned int param){
+  modrr=3;
   return 0;
 }
 
@@ -1229,6 +1329,199 @@ unsigned char hodge(unsigned char* cellies, unsigned int wr, unsigned int param)
   return sum;
 }
 
+unsigned char hodgea(unsigned char* cellies, unsigned int wr, unsigned int param){
+  int sum=0, numill=0, numinf=0;
+  unsigned char q,k1,k2,g;
+  static unsigned char x;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+  x=chunk;
+  if ((flag&0x01)==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
+
+  q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
+  if (k1==0) k1=1;
+  if (k2==0) k2=1;
+
+  sum=cells[x]+cells[x-1]+cells[x+1]+cells[x-chunk]+cells[x+chunk]+cells[x-chunk-1]+cells[x-chunk+1]+cells[x+chunk-1]+cells[x+chunk+1];
+
+  if (cells[x-1]==(q-1)) numill++; else if (cells[x-1]>0) numinf++;
+  if (cells[x+1]==(q-1)) numill++; else if (cells[x+1]>0) numinf++;
+  if (cells[x-chunk]==(q-1)) numill++; else if (cells[x-chunk]>0) numinf++;
+  if (cells[x+chunk]==(q-1)) numill++; else if (cells[x+chunk]>0) numinf++;
+  if (cells[x-chunk-1]==q) numill++; else if (cells[x-chunk-1]>0) numinf++;
+  if (cells[x-chunk+1]==q) numill++; else if (cells[x-chunk+1]>0) numinf++;
+  if (cells[x+chunk-1]==q) numill++; else if (cells[x+chunk-1]>0) numinf++;
+  if (cells[x+chunk+1]==q) numill++; else if (cells[x+chunk+1]>0) numinf++;
+
+  if(cells[x] == 0)
+    newcells[x%128] = floor(numinf / k1) + floor(numill / k2);
+  else if(cells[x] < q - 1)
+    newcells[x%128] = floor(sum / (numinf + 1)) + g;
+  else
+    newcells[x%128] = 0;
+
+  if(newcells[x%128] > q - 1)
+    newcells[x%128] = q - 1;
+
+  x++;
+  if (x>((chunk/2)-chunk-1)) {
+    x=chunk+1;
+    flag^=0x01;
+  }
+  modrr=0;
+  return sum;
+}
+
+unsigned char hodgeb(unsigned char* cellies, unsigned int wr, unsigned int param){
+  int sum=0, numill=0, numinf=0;
+  unsigned char q,k1,k2,g;
+  static unsigned char x;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+  x=chunk;
+  if ((flag&0x01)==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
+
+  q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
+  if (k1==0) k1=1;
+  if (k2==0) k2=1;
+
+  sum=cells[x]+cells[x-1]+cells[x+1]+cells[x-chunk]+cells[x+chunk]+cells[x-chunk-1]+cells[x-chunk+1]+cells[x+chunk-1]+cells[x+chunk+1];
+
+  if (cells[x-1]==(q-1)) numill++; else if (cells[x-1]>0) numinf++;
+  if (cells[x+1]==(q-1)) numill++; else if (cells[x+1]>0) numinf++;
+  if (cells[x-chunk]==(q-1)) numill++; else if (cells[x-chunk]>0) numinf++;
+  if (cells[x+chunk]==(q-1)) numill++; else if (cells[x+chunk]>0) numinf++;
+  if (cells[x-chunk-1]==q) numill++; else if (cells[x-chunk-1]>0) numinf++;
+  if (cells[x-chunk+1]==q) numill++; else if (cells[x-chunk+1]>0) numinf++;
+  if (cells[x+chunk-1]==q) numill++; else if (cells[x+chunk-1]>0) numinf++;
+  if (cells[x+chunk+1]==q) numill++; else if (cells[x+chunk+1]>0) numinf++;
+
+  if(cells[x] == 0)
+    newcells[x%128] = floor(numinf / k1) + floor(numill / k2);
+  else if(cells[x] < q - 1)
+    newcells[x%128] = floor(sum / (numinf + 1)) + g;
+  else
+    newcells[x%128] = 0;
+
+  if(newcells[x%128] > q - 1)
+    newcells[x%128] = q - 1;
+
+  x++;
+  if (x>((chunk/2)-chunk-1)) {
+    x=chunk+1;
+    flag^=0x01;
+  }
+  modrr=1;
+  return sum;
+}
+
+unsigned char hodgec(unsigned char* cellies, unsigned int wr, unsigned int param){
+  int sum=0, numill=0, numinf=0;
+  unsigned char q,k1,k2,g;
+  static unsigned char x;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+  x=chunk;
+  if ((flag&0x01)==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
+
+  q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
+  if (k1==0) k1=1;
+  if (k2==0) k2=1;
+
+  sum=cells[x]+cells[x-1]+cells[x+1]+cells[x-chunk]+cells[x+chunk]+cells[x-chunk-1]+cells[x-chunk+1]+cells[x+chunk-1]+cells[x+chunk+1];
+
+  if (cells[x-1]==(q-1)) numill++; else if (cells[x-1]>0) numinf++;
+  if (cells[x+1]==(q-1)) numill++; else if (cells[x+1]>0) numinf++;
+  if (cells[x-chunk]==(q-1)) numill++; else if (cells[x-chunk]>0) numinf++;
+  if (cells[x+chunk]==(q-1)) numill++; else if (cells[x+chunk]>0) numinf++;
+  if (cells[x-chunk-1]==q) numill++; else if (cells[x-chunk-1]>0) numinf++;
+  if (cells[x-chunk+1]==q) numill++; else if (cells[x-chunk+1]>0) numinf++;
+  if (cells[x+chunk-1]==q) numill++; else if (cells[x+chunk-1]>0) numinf++;
+  if (cells[x+chunk+1]==q) numill++; else if (cells[x+chunk+1]>0) numinf++;
+
+  if(cells[x] == 0)
+    newcells[x%128] = floor(numinf / k1) + floor(numill / k2);
+  else if(cells[x] < q - 1)
+    newcells[x%128] = floor(sum / (numinf + 1)) + g;
+  else
+    newcells[x%128] = 0;
+
+  if(newcells[x%128] > q - 1)
+    newcells[x%128] = q - 1;
+
+  x++;
+  if (x>((chunk/2)-chunk-1)) {
+    x=chunk+1;
+    flag^=0x01;
+  }
+  modrr=2;
+  return sum;
+}
+
+unsigned char hodged(unsigned char* cellies, unsigned int wr, unsigned int param){
+  int sum=0, numill=0, numinf=0;
+  unsigned char q,k1,k2,g;
+  static unsigned char x;
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+  x=chunk;
+  if ((flag&0x01)==0) {
+    cells=cellies; newcells=&cells[chunk/2];
+  }
+  else {
+    cells=&cells[chunk/2]; newcells=cellies;
+  }      
+
+  q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
+  if (k1==0) k1=1;
+  if (k2==0) k2=1;
+
+  sum=cells[x]+cells[x-1]+cells[x+1]+cells[x-chunk]+cells[x+chunk]+cells[x-chunk-1]+cells[x-chunk+1]+cells[x+chunk-1]+cells[x+chunk+1];
+
+  if (cells[x-1]==(q-1)) numill++; else if (cells[x-1]>0) numinf++;
+  if (cells[x+1]==(q-1)) numill++; else if (cells[x+1]>0) numinf++;
+  if (cells[x-chunk]==(q-1)) numill++; else if (cells[x-chunk]>0) numinf++;
+  if (cells[x+chunk]==(q-1)) numill++; else if (cells[x+chunk]>0) numinf++;
+  if (cells[x-chunk-1]==q) numill++; else if (cells[x-chunk-1]>0) numinf++;
+  if (cells[x-chunk+1]==q) numill++; else if (cells[x-chunk+1]>0) numinf++;
+  if (cells[x+chunk-1]==q) numill++; else if (cells[x+chunk-1]>0) numinf++;
+  if (cells[x+chunk+1]==q) numill++; else if (cells[x+chunk+1]>0) numinf++;
+
+  if(cells[x] == 0)
+    newcells[x%128] = floor(numinf / k1) + floor(numill / k2);
+  else if(cells[x] < q - 1)
+    newcells[x%128] = floor(sum / (numinf + 1)) + g;
+  else
+    newcells[x%128] = 0;
+
+  if(newcells[x%128] > q - 1)
+    newcells[x%128] = q - 1;
+
+  x++;
+  if (x>((chunk/2)-chunk-1)) {
+    x=chunk+1;
+    flag^=0x01;
+  }
+  modrr=3;
+  return sum;
+}
+
+
 unsigned char cel(unsigned char* cels, unsigned int ink, unsigned int param){
 
   static unsigned char l=0; unsigned char cell, state, res;
@@ -1257,6 +1550,130 @@ unsigned char cel(unsigned char* cels, unsigned int ink, unsigned int param){
   }
   return res;
 }
+
+unsigned char cela(unsigned char* cels, unsigned int ink, unsigned int param){
+
+  static unsigned char l=0; unsigned char cell, state, res;
+  unsigned char rule=cells[0];
+  unsigned char *cells=(unsigned char*)(0x1100+(CELLLEN*CELLLEN));
+  res=0;
+  l++;
+  l%=CELLLEN;
+
+  for (cell = 1; cell < CELLLEN; cell++){ 
+      state = 0;
+      if (cells[cell + 1+ (l*CELLLEN)]>128)
+	state |= 0x4;
+      if (cells[cell+(CELLLEN*l)]>128)
+	state |= 0x2;
+      if (cells[cell - 1 +(CELLLEN*l)]>128)
+	state |= 0x1;
+                     
+      if ((rule >> state) & 1){
+	res += 1; 
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
+      }
+      else{
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
+      } 
+  }
+  modrr=0;
+  return res;
+}
+
+unsigned char celb(unsigned char* cels, unsigned int ink, unsigned int param){
+
+  static unsigned char l=0; unsigned char cell, state, res;
+  unsigned char rule=cells[0];
+  unsigned char *cells=(unsigned char*)(0x1100+(CELLLEN*CELLLEN));
+  res=0;
+  l++;
+  l%=CELLLEN;
+
+  for (cell = 1; cell < CELLLEN; cell++){ 
+      state = 0;
+      if (cells[cell + 1+ (l*CELLLEN)]>128)
+	state |= 0x4;
+      if (cells[cell+(CELLLEN*l)]>128)
+	state |= 0x2;
+      if (cells[cell - 1 +(CELLLEN*l)]>128)
+	state |= 0x1;
+                     
+      if ((rule >> state) & 1){
+	res += 1; 
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
+      }
+      else{
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
+      } 
+  }
+  modrr=1;
+
+  return res;
+}
+
+unsigned char celc(unsigned char* cels, unsigned int ink, unsigned int param){
+
+  static unsigned char l=0; unsigned char cell, state, res;
+  unsigned char rule=cells[0];
+  unsigned char *cells=(unsigned char*)(0x1100+(CELLLEN*CELLLEN));
+  res=0;
+  l++;
+  l%=CELLLEN;
+
+  for (cell = 1; cell < CELLLEN; cell++){ 
+      state = 0;
+      if (cells[cell + 1+ (l*CELLLEN)]>128)
+	state |= 0x4;
+      if (cells[cell+(CELLLEN*l)]>128)
+	state |= 0x2;
+      if (cells[cell - 1 +(CELLLEN*l)]>128)
+	state |= 0x1;
+                     
+      if ((rule >> state) & 1){
+	res += 1; 
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
+      }
+      else{
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
+      } 
+  }
+    modrr=2;
+    
+  return res;
+}
+
+unsigned char celd(unsigned char* cels, unsigned int ink, unsigned int param){
+
+  static unsigned char l=0; unsigned char cell, state, res;
+  unsigned char rule=cells[0];
+  unsigned char *cells=(unsigned char*)(0x1100+(CELLLEN*CELLLEN));
+  res=0;
+  l++;
+  l%=CELLLEN;
+
+  for (cell = 1; cell < CELLLEN; cell++){ 
+      state = 0;
+      if (cells[cell + 1+ (l*CELLLEN)]>128)
+	state |= 0x4;
+      if (cells[cell+(CELLLEN*l)]>128)
+	state |= 0x2;
+      if (cells[cell - 1 +(CELLLEN*l)]>128)
+	state |= 0x1;
+                     
+      if ((rule >> state) & 1){
+	res += 1; 
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 255;
+      }
+      else{
+	cells[cell+(((l+1)%CELLLEN)*CELLLEN)] = 0;
+      } 
+  }
+  modrr=3;
+
+  return res;
+}
+
 
 unsigned char SIR(unsigned char* cellies, unsigned int ink, unsigned int param){
   unsigned char cell,x,sum=0;
@@ -1319,6 +1736,113 @@ unsigned char life(unsigned char* cellies, unsigned int ink, unsigned int param)
   return sum;
 }
 
+unsigned char lifea(unsigned char* cellies, unsigned int ink, unsigned int param){
+  unsigned char x, sum;
+
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+
+  if ((flag&0x01)==0) {
+    cells=(unsigned char*)0x1100; newcells=&cells[128];
+  }
+  else {
+    cells=&cells[128]; newcells=cellies;
+  }      
+
+  for (x=CELLLEN+1;x<(128-CELLLEN-1);x++){
+    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
+    sum=sum-cells[x]%2;
+    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
+    else newcells[x]=0;
+  }
+  
+  // swapping 
+  flag^=0x01;
+  modrr=0;
+  return sum;
+}
+
+unsigned char lifeb(unsigned char* cellies, unsigned int ink, unsigned int param){
+  unsigned char x, sum;
+
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+
+  if ((flag&0x01)==0) {
+    cells=(unsigned char*)0x1100; newcells=&cells[128];
+  }
+  else {
+    cells=&cells[128]; newcells=cellies;
+  }      
+
+  for (x=CELLLEN+1;x<(128-CELLLEN-1);x++){
+    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
+    sum=sum-cells[x]%2;
+    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
+    else newcells[x]=0;
+  }
+  
+  // swapping 
+  flag^=0x01;
+  modrr=1;
+
+  return sum;
+}
+
+unsigned char lifec(unsigned char* cellies, unsigned int ink, unsigned int param){
+  unsigned char x, sum;
+
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+
+  if ((flag&0x01)==0) {
+    cells=(unsigned char*)0x1100; newcells=&cells[128];
+  }
+  else {
+    cells=&cells[128]; newcells=cellies;
+  }      
+
+  for (x=CELLLEN+1;x<(128-CELLLEN-1);x++){
+    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
+    sum=sum-cells[x]%2;
+    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
+    else newcells[x]=0;
+  }
+  
+  // swapping 
+  flag^=0x01;
+  modrr=2;
+
+  return sum;
+}
+
+unsigned char lifed(unsigned char* cellies, unsigned int ink, unsigned int param){
+  unsigned char x, sum;
+
+  static unsigned char flag=0;
+  unsigned char *newcells, *cells;
+
+  if ((flag&0x01)==0) {
+    cells=(unsigned char*)0x1100; newcells=&cells[128];
+  }
+  else {
+    cells=&cells[128]; newcells=cellies;
+  }      
+
+  for (x=CELLLEN+1;x<(128-CELLLEN-1);x++){
+    sum=cells[x]%2+cells[x-1]%2+cells[x+1]%2+cells[x-CELLLEN]%2+cells[x+CELLLEN]%2+cells[x-CELLLEN-1]%2+cells[x-CELLLEN+1]%2+cells[x+CELLLEN-1]%2+cells[x+CELLLEN+1]%2;
+    sum=sum-cells[x]%2;
+    if (sum==3 || (sum+(cells[x]%2)==3)) newcells[x]=255;
+    else newcells[x]=0;
+  }
+  
+  // swapping 
+  flag^=0x01;
+  modrr=3;
+  return sum;
+}
+
+
 
 int main(void)
 {
@@ -1326,8 +1850,9 @@ int main(void)
   uint8_t stepr=1, stepw=1;
 
 
-  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy,swappy,cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,wredo,non};
-  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,rredo,non}; //31 so far (need 1 more!)
+  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodgea,hodgeb,hodgec,hodged,inca,incb,incc,incd,deca,decb,decc,decd,cela,celb,celc,celd,lifea,lifeb,lifec,lifed,rossya,rossyb,rossyc,rossyd,ifsya,ifsyb,ifsyc,ifsyd,nona,nonb,nonc,nond}; // reduce to 8 x 4(as mods of modrr)
+
+  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andy,orry,excy,divvy,starry,lefty,righty,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,rredo,non}; //32!
 
   instructionp=0; insdir=1; dir=1; btdir=0; dcdir=0;
   instructionpr=0; insdirr=1; dirr=1; btdirr=0; dcdirr=0;
@@ -1375,9 +1900,11 @@ int main(void)
     scaler=knob[2]%8;
     kn=knob[3]>>3;
     knn=knob[2]>>3;
-    //    kn=24;knn=1;
 
-    
+    // data feedbacks!
+    if (knob[3]==0) kn=wtae;
+    if (knob[2]==0) knn=rtae;
+    //    kn=4;knn=1; scalew=1;scaler=1;
     wtae=(*wplag[kn])((unsigned char*)lsamp,wtae,scalew);
     //if ((x%stepr)==0) rtae=(*rplag[knn])((unsigned char*)lsamp,rtae,scaler);
     rtae=(*rplag[knn])((unsigned char*)lsamp,rtae,scaler);
@@ -1392,6 +1919,7 @@ int main(void)
     oldkn=knob[5]; oldknn=knob[1];
     kwhich++;
     kwhich%=7;
+
 
 
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
