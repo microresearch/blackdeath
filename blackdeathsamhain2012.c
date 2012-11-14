@@ -1,20 +1,16 @@
 /*
 
-//
-
-TODO:
-
-- idea of some kind of double buffer swap mechanism-how could work????
+blackdeath samhain 2012 code base with more granular processing:
 
 ///CONTROLS///
+                     TOP    
+                     -0-write_effect/stepread
 
-             -0-write_effect/stepr
+-3-writehead/scale              -2-readhead/scale
 
--3-wtae/scale              -2-rtae/scale
+-5-start                        -1-end
 
--5-start                   -1-end
-
-             -4-grainsize/stepw
+                     -4-grainsize/stepwrite
 
 ///
 
