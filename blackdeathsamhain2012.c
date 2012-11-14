@@ -4,12 +4,11 @@
 
 TODO:
 
-- fix read/write crossover for some functions: eg. cel, life, SIR
 - idea of some kind of double buffer swap mechanism-how could work????
 
 ///CONTROLS///
 
-             -0-write=effect/stepr
+             -0-write_effect/stepr
 
 -3-wtae/scale              -2-rtae/scale
 
@@ -72,7 +71,7 @@ volatile unsigned char wtae; // ????
 //long oldrtae; // ????
 //long oldwtae;
 unsigned char datagen, effect, weff, wrambank,rrambank;
-volatile unsigned char *xramptr,*ptr;
+volatile unsigned char *xramptr,*xxramptr,*ptr;
 volatile unsigned char knob[6] = {0, 0, 0, 0, 0, 0};
 
 uint8_t *swap;
@@ -154,7 +153,7 @@ void write_DAC(uint8_t data)
 
 volatile unsigned char flagg;
 unsigned int modrrr,modrr;
-unsigned char i,ir;
+unsigned char i,ir,tmp;
 
 SIGNAL(TIMER1_COMPA_vect) {
 
@@ -198,9 +197,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
-  //    xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  //  xramptr = (unsigned char *)(0x1100+(wtae%MAX_SAM));
   *xramptr = (unsigned char) ADCH;
     break;
   case 1:
@@ -228,86 +225,87 @@ SIGNAL(TIMER1_COMPA_vect) {
   *xramptr = (unsigned char) ADCH|rtae;
     break;
   case 4:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
-  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) ADCH<<rtae;
-    break;
-  case 5:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
-  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) ADCH>>rtae;
-    break;
-  case 6:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
-  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) ADCH*rtae;
-    break;
-  case 7:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
-  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) ADCH/rtae;
-    break;
-  case 8:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
-  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) ADCH%rtae;
-    break;
-  case 9:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-  //  xramptr = (unsigned char *)(0x1100+lowersamp+(uint32_t)(wtae%tween));
-  xramptr = (unsigned char *)(llsamp+(uint32_t)(wtae%tween));
-  *xramptr = (unsigned char) ADCH;
-    break;
-  case 10:
-  ADMUX = 0x60; // clear existing channel selection 8 BIT                
-  high(ADCSRA, ADSC); 
-  loop_until_bit_is_set(ADCSRA, ADIF);
-			      //  xramptr = (unsigned char *)(0x1100+lowersamp+(uint32_t)(rtae%tween));
-  xramptr = (unsigned char *)(llsamp+(uint32_t)(rtae%tween));
-  *xramptr = (unsigned char) ADCH;
-    break;
-  case 11:
-    //  xramptr = (unsigned char *)(0x1100+lowersamp+(uint32_t)(wtae%tween));
-  xramptr = (unsigned char *)(llsamp+(uint32_t)(wtae%tween));
-  *xramptr = (unsigned char) rtae;
-    break;
-  case 12:
     //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
-  *xramptr = (unsigned char) wtae<<rtae;
+  *xramptr = (unsigned char) wtae*rtae;
   break;
-  case 13:
+  case 5:
     //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
   *xramptr = (unsigned char) wtae;
     break;
-  case 14:
+  case 6:
     //  xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
   *xramptr = (unsigned char) rtae;
+    break;
+  case 7:
+    // copy what is at rtae and wtae
+  xxramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
+  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+  *xramptr = *xxramptr ;
+  case 8:
+  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
+  xxramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+  *xramptr = *xxramptr;
+  *xxramptr=rtae;
+    break;
+  case 9:
+    // write to one and read from other
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
+  xxramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+  *xramptr = *xxramptr;
+  *xxramptr=ADCH;
+    break;
+  case 10:
+    // straight swap
+  xxramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
+  xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+  tmp=*xramptr;
+  *xramptr = *xxramptr ;
+  *xxramptr = tmp;
+  break;
+  case 11:
+    // variation on ignore chunk and swap with chunk
+    xxramptr = (unsigned char *)(llsamp+(rtae%tween));
+    xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+    tmp=*xramptr;
+    *xramptr = *xxramptr ;
+    *xxramptr = tmp;
+    break;
+  case 12:
+    // variation on ignore chunk and swap with chunk
+    xxramptr = (unsigned char *)(llsamp+(wtae%tween));
+    xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
+    tmp=*xramptr;
+    *xramptr = *xxramptr ;
+    *xxramptr = tmp;
+    break;
+  case 13:
+    xxramptr = (unsigned char *)(llsamp+(rtae%tween));
+    xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+    *xramptr = *xxramptr ;
+    break;
+  case 14:
+  ADMUX = 0x60; // clear existing channel selection 8 BIT                
+  high(ADCSRA, ADSC); 
+  loop_until_bit_is_set(ADCSRA, ADIF);
+  xramptr = (unsigned char *)(llsamp+(rtae%tween));
+  xxramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
+  *xramptr = *xxramptr;
+  *xxramptr=ADCH;
     break;
   case 15:
     //    xramptr = (unsigned char *)(lsamp+(uint32_t)(wtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(wtae%grainsize))%tween);
     // leave as it is!
+
     }
+
+  // how do we determine read one!
 
   //    xramptr = (unsigned char *)(lsamp+(uint32_t)(rtae%grainsize));
   xramptr = (unsigned char *)(llsamp+((uint32_t)chunk+(uint32_t)(rtae%grainsize))%tween);
