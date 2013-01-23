@@ -14,10 +14,6 @@ left: cpu step, select instruction set (>>x)
 mid: hardware and filter
 right: controls - plague step and plague process select, filter modifier!
 
-TODO: 
-
-** fix wrapping in hodge and update swap over
-
 */
 
 #define F_CPU 16000000UL 
@@ -115,10 +111,10 @@ void hodge(unsigned char* cellies){
   unsigned char *newcells, *cells;
 
   if (flag&0x01==0) {
-    cells=cellies; newcells=&cells[MAX_SAM/2];
+    cells=cellies; newcells=&cellies[MAX_SAM/2];
   }
   else {
-    cells=&cells[MAX_SAM/2]; newcells=cellies;
+    cells=&cellies[MAX_SAM/2]; newcells=cellies;
   }      
 
   q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
@@ -187,10 +183,10 @@ void SIR(unsigned char* cellies){
   unsigned char kk=cellies[0], p=cellies[1];
 
   if (flag&0x01==0) {
-    cells=cellies; newcells=&cells[MAX_SAM/2];
+    cells=cellies; newcells=&cellies[MAX_SAM/2];
   }
   else {
-    cells=&cells[MAX_SAM/2]; newcells=cellies;
+    cells=&cellies[MAX_SAM/2]; newcells=cellies;
   }      
 
 
@@ -221,10 +217,10 @@ void life(unsigned char* cellies){
   unsigned char *newcells, *cells;
 
   if (flag&0x01==0) {
-    cells=cellies; newcells=&cells[MAX_SAM/2];
+    cells=cellies; newcells=&cellies[MAX_SAM/2];
   }
   else {
-    cells=&cells[MAX_SAM/2]; newcells=cellies;
+    cells=&cellies[MAX_SAM/2]; newcells=cellies;
   }      
 
   for (x=CELLLEN+1;x<((MAX_SAM/2)-CELLLEN-1);x++){
@@ -278,7 +274,9 @@ unsigned char btstraight(unsigned char* cells, unsigned char IP){
   else if (btdir==2) btdir=3;
   else if (btdir==3) btdir=2;
     }
+  return IP;
 }
+
 
 unsigned char btbackup(unsigned char* cells, unsigned char IP){
   if (dcdir==0) omem-=1;
@@ -312,12 +310,13 @@ unsigned char btunturn(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char btg(unsigned char* cells, unsigned char IP){
-  unsigned char x;
+  unsigned char x=0;
   while (x<20 && cells[omem]!=0){
     if (dcdir==0) omem+=1;
     else if (dcdir==1) omem-=1;
     else if (dcdir==2) omem+=16;
     else if (dcdir==3) omem-=16;
+    x++;
   }
   return IP;
 }
@@ -616,44 +615,44 @@ unsigned char cycle;
 
 unsigned char bfinc(unsigned char* cells, unsigned char IP){
   omem++; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfdec(unsigned char* cells, unsigned char IP){
   omem--; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfincm(unsigned char* cells, unsigned char IP){
   cells[omem]++; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfdecm(unsigned char* cells, unsigned char IP){
   cells[omem]--; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfoutf(unsigned char* cells, unsigned char IP){
   (*filtermod[qqq]) ((int)cells[omem]);
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfoutp(unsigned char* cells, unsigned char IP){
   OCR0A=cells[omem]; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfin(unsigned char* cells, unsigned char IP){
   cells[omem] = adcread(3); 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfbrac1(unsigned char* cells, unsigned char IP){
   cycle++; 
   if(cycle>=20) cycle=0; 
   ostack[cycle] = IP; 
-  return IP++;
+  return ++IP;
 }
 
 unsigned char bfbrac2(unsigned char* cells, unsigned char IP){
@@ -821,6 +820,7 @@ void main(void)
 
   adc_init();
   initcell(cells);
+  dir=1;
   DDRD|=0x47; // 0,1,2,6 as out
   DDRB|=0x02;  
   TCCR1A= (1<<COM1A0);// | (1<<WGM11) | (1<<WGM10); // KEEP AS CTC for filter
@@ -848,7 +848,7 @@ void main(void)
     if (hardware==0) hardware=instructionp;
     if (controls==0) controls=instructionp;
 
-    qqq=controls%4;
+    qqq=controls%4; // choosing filtermod
     
     count++;
     cpu=IP>>5; // 8 CPUs
@@ -889,7 +889,7 @@ void main(void)
 	  case 5:
 	    instruction=cells[instructionp];
 	    OCR0A=instruction;
-	    instructionp+=insdir;
+	    instructionp+=dir;
 	    break;
 	  case 6:
 	    instruction=cells[instructionp];
@@ -944,7 +944,7 @@ void main(void)
     }
 
     fhk=hardware>>4;
-        switch(fhk)      {
+    switch(fhk)      {
     case 0:
       cbi(DDRB,PB1); //filter off
       break;
