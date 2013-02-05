@@ -1,16 +1,16 @@
 /*
 
-blackdeath samhain 2012 code base with more granular processing:
+blackdeath samhain 2012 code base merged with simpler interrupt
 
 ///CONTROLS///
                      TOP    
-                     -0-write_effect/stepread
+                     -0-action on writhead
 
--3-writehead/scale              -2-readhead/scale
+-3- write mode                             -2-read mode/scalars
 
--5-start                        -1-end
+-5- w mod                                  -1- r mod/steps
 
-                     -4-grainsize/stepwrite
+                     -4-action on readhead (work on)
 
 ///
 
@@ -153,10 +153,10 @@ unsigned char i,ir,tmp;
 
 SIGNAL(TIMER1_COMPA_vect) {
 
-
+  unsigned char ccccc;
   unsigned int ADresult;
-  unsigned char tmp;
-  static unsigned int wcount=0x1100, wwcount,rrcount;;
+  static unsigned char tmp;
+  static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
 
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -241,120 +241,167 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   }
 
-  switch(knob[3]>>4){
-  case 0:
-    wcount+=knob[5];
-    break;
-  case 1:
-    wcount=((wcount-0x1100)*knob[5])+0x1100;
-    break;
-  case 2:
-    wcount=((wcount-0x1100)/knob[5])+0x1100;
-    break;
-  case 3:
-    wcount-=knob[5];
-    if (wcount<0x1100) wcount=61440;
-    break;
-  case 4:
-    wcount=((wcount-0x1100)>>knob[5])+0x1100;
-    break;
-  case 5:
-    wcount=((wcount-0x1100)<<knob[5])+0x1100;
-    break;
-  case 6:
-    // shift from static base and keep counting
-    wcount=(knob[5]<<5)+0x1100+wwcount;
-    wwcount++;
-    break;
-  case 7:
-    wcount=(knob[5]<<5)+0x1100+wwcount;
-    wwcount--;
-    //    if (wcount<0x1100) wcount=65536;
-    break;
-  case 8:
-    wcount=(wtae<<5)+wcount;
-    break;
-  case 9:
-    wcount=(wtae<<4)+wcount;
-    break;
-  case 10:
-    wcount=(wtae<<3)+wcount;
-    break;
-  case 11:
-    wcount=0x1100+wtae;
-    break;
-  case 12:
-    wcount=0xffff-((wtae<<5)+wcount);
-    break;
-  case 13:
-    wcount=((wcount-0x1100)*wtae)+0x1100;
-    break;
-  case 14:
-    wcount=((wcount-0x1100)/wtae)+0x1100;
-    break;
-  case 15:
-    wcount=0xffff-((wtae<<5)-wcount);
-  }
+  wcount+=1;
+  /* switch(knob[3]>>4){ */
+  /* case 0: */
+  /*   wcount+=knob[5]>>4; */
+  /*   break; */
+  /* case 1: */
+  /*   wcount=((wcount-0x1100)*knob[5])+0x1100; */
+  /*   break; */
+  /* case 2: */
+  /*   wcount=((wcount-0x1100)/knob[5])+0x1100; */
+  /*   break; */
+  /* case 3: */
+  /*   wcount-=knob[5]; */
+  /*   if (wcount<0x1100) wcount=61440; */
+  /*   break; */
+  /* case 4: */
+  /*   wcount=((wcount-0x1100)>>knob[5])+0x1100; */
+  /*   break; */
+  /* case 5: */
+  /*   wcount=((wcount-0x1100)<<knob[5])+0x1100; */
+  /*   break; */
+  /* case 6: */
+  /*   // shift from static base and keep counting */
+  /*   wcount=(knob[5]<<7)+0x1100+wwcount; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 7: */
+  /*   wcount=(knob[5]<<7)+0x1100+wwcount; */
+  /*   wwcount--; */
+  /*   //    if (wcount<0x1100) wcount=65536; */
+  /*   break; */
+  /* case 8: */
+  /*   wcount=(wtae<<7)+wwcount; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 9: */
+  /*   wcount=(wtae<<5)+wwcount; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 10: */
+  /*   wcount=(wtae<<4)+wwcount; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 11: */
+  /*   wcount=0x1100+wtae+wwcount; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 12: */
+  /*   wcount=0xffff-((wtae<<5)+wwcount); */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 13: */
+  /*   wcount=((wcount-0x1100)*wtae)+0x1100; */
+  /*   wwcount++; */
+  /*   break; */
+  /* case 14: */
+  /*   wcount=((wcount-0x1100)/wtae)+0x1100; */
+  /*   break; */
+  /* case 15: */
+  /*   wcount=0xffff-((wtae<<5)-wwcount); */
+  /*   wwcount++; */
+  /*  }*/
 
-  switch(knob[2]>>4){
+ccccc=3;
+
+switch(ccccc){// knob[2]>>4;
   case 0:
-    rcount+=knob[1];
+    rcount+=knob[1]>>4;
+    if (rcount<0x1100) rcount+=0x1100;  
     break;
   case 1:
-    rcount=((rcount-0x1100)*knob[1])+0x1100;
+    rcount=((rcount-0x1100)*knob[1]>>4)+rrcount+0x1100;
+    rrcount++;
+    if (rcount<0x1100) rcount+=0x1100;  
     break;
   case 2:
-    rcount=((rcount-0x1100)/knob[1])+0x1100;
+        rcount=((rcount-0x1100)/knob[1])+rrcount+0x1100;
+        rrcount++;
+    if (rcount<0x1100) rcount+=0x1100;  
     break;
   case 3:
-    rcount-=knob[1];
-    if (rcount<0x1100) rcount=61440;
+    rcount+=rtae;
+    if (rcount<0x1100) rcount=0x1100;
     break;
   case 4:
-    rcount=((rcount-0x1100)>>knob[1])+0x1100;
+    rcount+=(rtae>>(knob[1]%8));
+    if (rcount<0x1100) rcount=0x1100;
     break;
   case 5:
-    rcount=((rcount-0x1100)<<knob[1])+0x1100;
+    //    rcount=((rcount-0x1100)<<knob[1])+0x1100;
     break;
   case 6:
     // shift from static base and keep counting
-    rcount=(knob[1]<<5)+0x1100+rrcount;    
+    rcount=((int)knob[1]<<8)+0x1100+rrcount;    
     rrcount++;
+    if (rcount<0x1100) {
+      rcount=((int)knob[1]<<8)+0x1100;  
+      rrcount=0;
+    }
     break;
   case 7:
-    rcount=(knob[1]<<5)+0x1100+rrcount;    
+    rcount=(knob[1]<<7)+0x1100+rrcount;    
     rrcount--;
-    //    if (rcount<0x1100) rcount=65536;
+    if (rcount<0x1100) {
+      rrcount=61440;
+    rcount=(knob[1]<<7)+0xffff;    
+    }
     break;
   case 8:
-    rcount=(rtae<<5)+rcount;
+    rcount=(rtae<<7)+0x1100+rrcount;
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+    rcount=(rtae<<7)+0x1100;
+    }
     break;
   case 9:
-    rcount=(rtae<<4)+rcount;
+    rcount=(rtae<<5)+0x1100+rrcount;
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+    rcount=(rtae<<5)+0x1100;
+    }
     break;
   case 10:
-    rcount=(rtae<<3)+rcount;
+    rcount=(rtae<<4)+0x1100+rrcount;
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+    rcount=(rtae<<4)+0x1100;
+    }
     break;
   case 11:
-    rcount=0x1100+rtae;
+    rcount=0x1100+rtae+rrcount;
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+    rcount=rtae+0x1100;
+    }
     break;
   case 12:
-    rcount=0xffff-((rtae<<5)+rcount);
+    rcount=0xffff-((rtae<<8)+rrcount);
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+    rcount=0xffff-(rtae<<8);
+    }
     break;
   case 13:
     rcount=((rcount-0x1100)*rtae)+0x1100;
+    //////////////
     break;
   case 14:
     rcount=((rcount-0x1100)/rtae)+0x1100;
     break;
   case 15:
-    rcount=0xffff-((rtae<<5)-rcount);
-    break;
+    rcount=0xffff-((rtae<<5)-rrcount);
+    rrcount++;
   }
 
     if (wcount<0x1100) wcount+=0x1100;  
-    if (rcount<0x1100) rcount+=0x1100;  
-
   
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -1246,8 +1293,8 @@ void ioinit(void)
 void adc_init(void)
 {
   //  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
-  //     ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
-          ADCSRA = (1 << ADPS2); // divide/16
+       ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
+  //          ADCSRA = (1 << ADPS2); // divide/16
   //  ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
   ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
   ADCSRA |= (1 << ADEN) ;
@@ -1515,7 +1562,8 @@ unsigned char worm(unsigned char* cellies, unsigned int ink, unsigned int param)
 }
 
 unsigned char back(unsigned char* cellies, unsigned int ink, unsigned int param){
-  return (chunk-ink);
+  //REDO!
+  return ink*ink;
 }
 
 unsigned char munge(unsigned char* cellies, unsigned int ink, unsigned int param){
@@ -1529,8 +1577,8 @@ unsigned char coded(unsigned char* cellies, unsigned int ink, unsigned int param
   }
 
 unsigned char wredo(unsigned char* cellies, unsigned int ink, unsigned int param){
-  grainsize=ink;
-  return ink+param;
+  // REDO!
+  return ink*param;
 }
 
 unsigned char non(unsigned char* cellies, unsigned int ink, unsigned int param){
@@ -1826,10 +1874,12 @@ unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) 
   scaler=1;scalew=1; stepw=10;stepr=10;
   lsamp=0x1100;
 
+  // to resolve scale?
+
   for(;;){
     x++;
-            if ((x%knob[5]%8)==0) wtae=(*wplag[knob[5]>>3])((unsigned char*)lsamp,wtae,scalew); // does lsamp overflow?
-            if ((x%knob[1]%8)==0) rtae=(*rplag[knob[1]>>3])((unsigned char*)lsamp,rtae,scaler);
+    if ((x%(knob[5]%8))==0) wtae=(*wplag[knob[5]>>3])((unsigned char*)lsamp,wtae,knob[2]%8); // does lsamp overflow?
+    if ((x%(knob[1]%8))==0) rtae=(*rplag[knob[1]>>3])((unsigned char*)lsamp,rtae,knob[3]%8);
 
     cli();
     ADMUX = 0x61+kwhich;                
