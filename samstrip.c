@@ -10,7 +10,11 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 -5- w mod                                  -1- r mod/steps
 
-                     -4-action on readhead (work on)
+                     -4-action on readhead
+
+TODO:
+
+do feedback with float somehow
 
 ///
 
@@ -155,7 +159,7 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   unsigned char ccccc;
   unsigned int ADresult;
-  static unsigned char tmp;
+  unsigned char tmp;
   static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
 
@@ -177,7 +181,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     *xramptr += (unsigned char) ADCH; 
     break;
   case 3:
-    *xramptr -= (unsigned char) ADCH; 
+    *xramptr = (unsigned char) ADCH*wtae; 
     break;
   case 4:
     *xramptr ^= (unsigned char) ADCH; 
@@ -195,10 +199,12 @@ SIGNAL(TIMER1_COMPA_vect) {
   *xramptr*=tmp;
     break;
   case 7:
-  xramptr = (unsigned char *)(rcount);
-  *xramptr*=tmp;
-    break;
+  xramptr = (unsigned char *)(wcount);
+  *xramptr*=wtae;
   }
+
+
+    //// or free up this knob?????
 
   switch(knob[4]>>5){
   case 0:
@@ -218,97 +224,136 @@ SIGNAL(TIMER1_COMPA_vect) {
   tmp+=*xramptr;
     break;
   case 3:
-  xramptr = (unsigned char *)(rcount);
-  tmp=*xramptr;
-  xramptr = (unsigned char *)(wcount);
-  tmp=tmp/(*xramptr);
+    xramptr = (unsigned char *)(0x1100+(wcount-rcount));
+    tmp=*xramptr;
     break;
   case 4:
-    xramptr = (unsigned char *)(rcount);
-  tmp^=*xramptr;
+  xramptr = (unsigned char *)(rcount);
+  tmp*=*xramptr;
     break;
   case 5:
-    xramptr = (unsigned char *)(rcount);
-  tmp-=*xramptr;
-    break;
-  case 6:
   xramptr = (unsigned char *)(wcount);
   tmp*=*xramptr;
     break;
+  case 6:
+  xramptr = (unsigned char *)(wcount);
+  tmp=*xramptr*rtae;
+  break;
   case 7:
   xramptr = (unsigned char *)(wcount);
-  tmp+=*xramptr;
+  tmp=*xramptr;
     break;
   }
 
-  wcount+=1;
-  /* switch(knob[3]>>4){ */
-  /* case 0: */
-  /*   wcount+=knob[5]>>4; */
-  /*   break; */
-  /* case 1: */
-  /*   wcount=((wcount-0x1100)*knob[5])+0x1100; */
-  /*   break; */
-  /* case 2: */
-  /*   wcount=((wcount-0x1100)/knob[5])+0x1100; */
-  /*   break; */
-  /* case 3: */
-  /*   wcount-=knob[5]; */
-  /*   if (wcount<0x1100) wcount=61440; */
-  /*   break; */
-  /* case 4: */
-  /*   wcount=((wcount-0x1100)>>knob[5])+0x1100; */
-  /*   break; */
-  /* case 5: */
-  /*   wcount=((wcount-0x1100)<<knob[5])+0x1100; */
-  /*   break; */
-  /* case 6: */
-  /*   // shift from static base and keep counting */
-  /*   wcount=(knob[5]<<7)+0x1100+wwcount; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 7: */
-  /*   wcount=(knob[5]<<7)+0x1100+wwcount; */
-  /*   wwcount--; */
-  /*   //    if (wcount<0x1100) wcount=65536; */
-  /*   break; */
-  /* case 8: */
-  /*   wcount=(wtae<<7)+wwcount; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 9: */
-  /*   wcount=(wtae<<5)+wwcount; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 10: */
-  /*   wcount=(wtae<<4)+wwcount; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 11: */
-  /*   wcount=0x1100+wtae+wwcount; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 12: */
-  /*   wcount=0xffff-((wtae<<5)+wwcount); */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 13: */
-  /*   wcount=((wcount-0x1100)*wtae)+0x1100; */
-  /*   wwcount++; */
-  /*   break; */
-  /* case 14: */
-  /*   wcount=((wcount-0x1100)/wtae)+0x1100; */
-  /*   break; */
-  /* case 15: */
-  /*   wcount=0xffff-((wtae<<5)-wwcount); */
-  /*   wwcount++; */
-  /*  }*/
-
-ccccc=3;
-
-switch(ccccc){// knob[2]>>4;
+  //  ccccc=0;
+  switch(knob[3]>>4){
   case 0:
-    rcount+=knob[1]>>4;
+    wcount+=(knob[5]>>4);
+    if (wcount<0x1100) wcount+=0x1100;  
+    break;
+  case 1:
+    wcount=((wcount-0x1100)*knob[5]>>4)+wwcount+0x1100;
+    wwcount++;
+    if (wcount<0x1100) wcount+=0x1100;  
+    break;
+  case 2:
+        wcount=((wcount-0x1100)/knob[5])+wwcount+0x1100;
+        wwcount++;
+    if (wcount<0x1100) wcount+=0x1100;  
+    break;
+  case 3:
+    wcount+=wtae;
+    if (wcount<0x1100) wcount=0x1100;
+    break;
+  case 4:
+    wcount+=(wtae>>(knob[5]%8));
+    if (wcount<0x1100) wcount=0x1100;
+    break;
+  case 5:
+    // shift from static base and keep counting
+    wcount=((int)knob[5]<<8)+0x1100+wwcount;    
+    wwcount++;
+    if (wcount<0x1100) {
+      wcount=((int)knob[5]<<8)+0x1100;  
+      wwcount=0;
+    }
+    break;
+  case 6:
+    wcount=(knob[5]<<7)+0x1100+wwcount;    
+    wwcount--;
+    if (wcount<0x1100) {
+      wwcount=61440;
+    wcount=(knob[5]<<7)+0xffff;    
+    }
+    break;
+  case 7:
+    // shift from static base and keep counting
+    wcount=(wtae<<(knob[3]%8))+0x1100+wwcount;    
+    wwcount++;
+    if (wcount<0x1100) {
+      wwcount=0;
+      wcount=(wtae<<(knob[3]%8))+0x1100;    
+    }
+    break;
+  case 8:
+    // static ceiling
+    wcount=0x1100+wwcount;    
+    wwcount++;
+    if (wwcount>(knob[3]<<7)) wwcount=0;
+    break;
+  case 9:
+    wcount=(wtae<<7)+0x1100+wwcount;
+    wwcount++;
+    if (wcount<0x1100) {
+      wwcount=0;
+    wcount=(wtae<<7)+0x1100;
+    }
+    break;
+  case 10:
+    wcount=(wtae<<4)+0x1100+wwcount;
+    wwcount++;
+    if (wcount<0x1100) {
+      wwcount=0;
+    wcount=(wtae<<4)+0x1100;
+    }
+    break;
+  case 11:
+    wcount=0x1100+wtae+wwcount;
+    wwcount++;
+    if (wcount<0x1100) {
+      wwcount=0;
+    wcount=wtae+0x1100;
+    }
+    break;
+  case 12:
+    wcount=0xffff-((wtae<<8)+wwcount);
+    wwcount++;
+    if (wcount<0x1100) {
+      wwcount=0;
+    wcount=0xffff-(wtae<<8);
+    }
+    break;
+  case 13:
+    wcount=((wcount-0x1100)*wtae)+0x1100;
+    wcount++;
+    if (wcount<0x1100) {
+    wcount+=0x1100;
+    }
+    break;
+  case 14:
+    wcount=((wcount-0x1100)/wtae)+0x1100;
+    if (wcount<0x1100) wcount+=0x1100;  
+    break;
+  case 15:
+    wcount=0xffff-((wtae<<5)-wwcount);
+    wwcount++;
+    if (wcount<0x1100) wcount+=0x1100;  
+  }
+
+
+  switch(knob[2]>>4){
+  case 0:
+    rcount+=(knob[1]>>2)+1;
     if (rcount<0x1100) rcount+=0x1100;  
     break;
   case 1:
@@ -330,9 +375,6 @@ switch(ccccc){// knob[2]>>4;
     if (rcount<0x1100) rcount=0x1100;
     break;
   case 5:
-    //    rcount=((rcount-0x1100)<<knob[1])+0x1100;
-    break;
-  case 6:
     // shift from static base and keep counting
     rcount=((int)knob[1]<<8)+0x1100+rrcount;    
     rrcount++;
@@ -341,7 +383,7 @@ switch(ccccc){// knob[2]>>4;
       rrcount=0;
     }
     break;
-  case 7:
+  case 6:
     rcount=(knob[1]<<7)+0x1100+rrcount;    
     rrcount--;
     if (rcount<0x1100) {
@@ -349,20 +391,27 @@ switch(ccccc){// knob[2]>>4;
     rcount=(knob[1]<<7)+0xffff;    
     }
     break;
+  case 7:
+    // shift from static base and keep counting
+    rcount=(rtae<<(knob[2]%8))+0x1100+rrcount;    
+    rrcount++;
+    if (rcount<0x1100) {
+      rrcount=0;
+      rcount=(rtae<<(knob[2]%8))+0x1100;    
+    }
+    break;
   case 8:
+    // static ceiling
+    rcount=0x1100+rrcount;    
+    rrcount++;
+    if (rrcount>(knob[2]<<7)) rrcount=0;
+    break;
+  case 9:
     rcount=(rtae<<7)+0x1100+rrcount;
     rrcount++;
     if (rcount<0x1100) {
       rrcount=0;
     rcount=(rtae<<7)+0x1100;
-    }
-    break;
-  case 9:
-    rcount=(rtae<<5)+0x1100+rrcount;
-    rrcount++;
-    if (rcount<0x1100) {
-      rrcount=0;
-    rcount=(rtae<<5)+0x1100;
     }
     break;
   case 10:
@@ -391,17 +440,22 @@ switch(ccccc){// knob[2]>>4;
     break;
   case 13:
     rcount=((rcount-0x1100)*rtae)+0x1100;
-    //////////////
+    rcount++;
+    if (rcount<0x1100) {
+    rcount+=0x1100;
+    }
     break;
   case 14:
     rcount=((rcount-0x1100)/rtae)+0x1100;
+    if (rcount<0x1100) rcount+=0x1100;  
     break;
   case 15:
     rcount=0xffff-((rtae<<5)-rrcount);
     rrcount++;
+    if (rcount<0x1100) rcount+=0x1100;  
   }
 
-    if (wcount<0x1100) wcount+=0x1100;  
+    //    if (wcount<0x1100) wcount+=0x1100;  
   
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
