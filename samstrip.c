@@ -4,7 +4,7 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 ///CONTROLS///
                      TOP    
-                     -0-action on writhead
+                     -0-action on writehead
 
 -3- write mode                             -2-read mode/scalars
 
@@ -14,7 +14,11 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 TODO:
 
-do feedback with float somehow
+- do rambanks
+
+- do something with modrrr and add codehead shift somehow
+
+- fix back and wredo instruction sets
 
 ///
 
@@ -78,10 +82,6 @@ uint8_t *swap;
 volatile uint8_t swapping;
 uint8_t kwhich,dist, oldknob ,oldkn,oldknn,kn,knn;
 uint8_t susceptible = 0;                                                                   uint8_t recovered = 255;                                                                   uint8_t tau = 2;  
-
-
-volatile unsigned int chunk,rchunk;
-uint8_t grainsize,rgrainsize;
 
   uint8_t low, high, rule, accelerate;
   uint8_t celln[CELLLEN*CELLLEN];
@@ -160,6 +160,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   unsigned char ccccc;
   unsigned int ADresult;
   unsigned char tmp;
+  static unsigned char subcountr=0,subcountw=0;
   static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
 
@@ -170,21 +171,21 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   xramptr = (unsigned char *)(wcount);
 
-  switch(knob[0]>>5){
+  switch(knob[0]>>5){ //
   case 0:
   *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
     break;
   case 1:
-    *xramptr *= (unsigned char) ADCH; 
+    *xramptr *= (unsigned char)ADCH/((knob[0]&15)+1);
     break;
   case 2:
-    *xramptr += (unsigned char) ADCH; 
+    *xramptr += (unsigned char) ADCH;
     break;
   case 3:
-    *xramptr = (unsigned char) ADCH*wtae; 
+    *xramptr = (float) ADCH*(float)wtae/(knob[0]&15);
     break;
   case 4:
-    *xramptr ^= (unsigned char) ADCH; 
+    *xramptr ^= (unsigned char) ADCH;
     break;
   case 5:
   xramptr = (unsigned char *)(rcount);
@@ -204,8 +205,6 @@ SIGNAL(TIMER1_COMPA_vect) {
   }
 
 
-    //// or free up this knob?????
-
   switch(knob[4]>>5){
   case 0:
   xramptr = (unsigned char *)(rcount);
@@ -215,7 +214,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   xramptr = (unsigned char *)(rcount);
   tmp=*xramptr;
   xramptr = (unsigned char *)(wcount);
-  tmp*=*xramptr;
+  tmp*=(float)(*xramptr)/((knob[4]&15)+1);
   break;
   case 2:
   xramptr = (unsigned char *)(rcount);
@@ -249,166 +248,173 @@ SIGNAL(TIMER1_COMPA_vect) {
   switch(knob[3]>>4){
   case 0:
     wcount+=(knob[5]>>4);
-    if (wcount<0x1100) wcount+=0x1100;  
+    if (wcount<0x1100) wcount=0x1100;
     break;
   case 1:
-    wcount=((wcount-0x1100)*knob[5]>>4)+wwcount+0x1100;
-    wwcount++;
-    if (wcount<0x1100) wcount+=0x1100;  
+    wcount=((wcount-0x1100)*(knob[5]>>4))+wwcount+0x1100;
+    wwcount+=(knob[3]&15);
+    if (wcount<0x1100) wcount+=0x1100;
     break;
   case 2:
-        wcount=((wcount-0x1100)/knob[5])+wwcount+0x1100;
-        wwcount++;
-    if (wcount<0x1100) wcount+=0x1100;  
+    wcount=((wcount-0x1100)/knob[5])+wwcount+0x1100;
+    wwcount+=(knob[3]&15);
+    if (wcount<0x1100) wcount+=0x1100;
     break;
   case 3:
-    wcount+=wtae;
-    if (wcount<0x1100) wcount=0x1100;
+    wcount-=(knob[5]>>4);
+    if (wcount<0x1100) wcount=0xffff;
     break;
   case 4:
-    wcount+=(wtae>>(knob[5]%8));
-    if (wcount<0x1100) wcount=0x1100;
+  if ((subcountw&(knob[5]+1))!=0){
+    wcount++;
+    subcountw=0;}
+    subcountw++;
     break;
   case 5:
     // shift from static base and keep counting
-    wcount=((int)knob[5]<<8)+0x1100+wwcount;    
-    wwcount++;
+    wcount=((int)knob[5]<<8)+0x1100+wwcount;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
-      wcount=((int)knob[5]<<8)+0x1100;  
+      wcount=((int)knob[5]<<8)+0x1100;
       wwcount=0;
     }
     break;
   case 6:
-    wcount=(knob[5]<<7)+0x1100+wwcount;    
-    wwcount--;
+    wcount=(knob[5]<<7)+0x1100+wwcount;
+    wwcount-=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=61440;
-    wcount=(knob[5]<<7)+0xffff;    
+    wcount=(knob[5]<<7)+0xffff;
     }
     break;
   case 7:
     // shift from static base and keep counting
-    wcount=(wtae<<(knob[3]%8))+0x1100+wwcount;    
-    wwcount++;
+    wcount=(wtae<<(knob[5]&7))+0x1100+wwcount;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=0;
-      wcount=(wtae<<(knob[3]%8))+0x1100;    
+      wcount=(wtae<<(knob[5]&7))+0x1100;
     }
     break;
-  case 8:
+ case 8:
     // static ceiling
-    wcount=0x1100+wwcount;    
-    wwcount++;
-    if (wwcount>(knob[3]<<7)) wwcount=0;
+    wcount=0x1100+wwcount;
+    wwcount+=(knob[3]&15);
+    if (wwcount>(knob[5]<<7)) wwcount=0;
     break;
-  case 9:
+ case 9:
+   wcount+=(wtae<<(knob[5]>>4));
+   if (wcount<0x1100) wcount+=0x1100;
+   break;
+ case 10:
+    wcount=0xffff-((wtae<<5)-wwcount);
+    wwcount+=knob[3]&15;
+    if (wcount<0x1100) {
+      wcount=0x1100;
+      wwcount=0;
+    }
+   break;
+ case 11:
     wcount=(wtae<<7)+0x1100+wwcount;
-    wwcount++;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=0;
     wcount=(wtae<<7)+0x1100;
     }
     break;
-  case 10:
+  case 12:
     wcount=(wtae<<4)+0x1100+wwcount;
-    wwcount++;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=0;
     wcount=(wtae<<4)+0x1100;
     }
     break;
-  case 11:
+  case 13:
     wcount=0x1100+wtae+wwcount;
-    wwcount++;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=0;
     wcount=wtae+0x1100;
     }
     break;
-  case 12:
+  case 14:
     wcount=0xffff-((wtae<<8)+wwcount);
-    wwcount++;
+    wwcount+=(knob[3]&15);
     if (wcount<0x1100) {
       wwcount=0;
     wcount=0xffff-(wtae<<8);
     }
     break;
-  case 13:
-    wcount=((wcount-0x1100)*wtae)+0x1100;
-    wcount++;
-    if (wcount<0x1100) {
-    wcount+=0x1100;
-    }
-    break;
-  case 14:
-    wcount=((wcount-0x1100)/wtae)+0x1100;
-    if (wcount<0x1100) wcount+=0x1100;  
-    break;
   case 15:
-    wcount=0xffff-((wtae<<5)-wwcount);
-    wwcount++;
-    if (wcount<0x1100) wcount+=0x1100;  
+    wcount=((wcount-0x1100)/wtae)+0x1100;
+    break;
   }
 
 
   switch(knob[2]>>4){
   case 0:
     rcount+=(knob[1]>>2)+1;
-    if (rcount<0x1100) rcount+=0x1100;  
+    if (rcount<0x1100) rcount+=0x1100;
     break;
   case 1:
     rcount=((rcount-0x1100)*knob[1]>>4)+rrcount+0x1100;
-    rrcount++;
-    if (rcount<0x1100) rcount+=0x1100;  
+    rrcount+=knob[1]&15;
+    if (rcount<0x1100) rcount+=0x1100;
     break;
   case 2:
-        rcount=((rcount-0x1100)/knob[1])+rrcount+0x1100;
-        rrcount++;
-    if (rcount<0x1100) rcount+=0x1100;  
+    rcount=((rcount-0x1100)/knob[1])+rrcount+0x1100;
+    rrcount+=knob[2]&15;
+    if (rcount<0x1100) {
+      rcount+=0x1100;
+      rrcount=0;
+    }
     break;
   case 3:
-    rcount+=rtae;
-    if (rcount<0x1100) rcount=0x1100;
+    rcount-=(knob[1]>>4);
+    if (rcount<0x1100) rcount=0xffff;
     break;
   case 4:
-    rcount+=(rtae>>(knob[1]%8));
-    if (rcount<0x1100) rcount=0x1100;
+    if ((subcountr&(knob[1]+1))!=0){
+    rcount++;
+    subcountr=0;}
+    subcountr++;
     break;
   case 5:
     // shift from static base and keep counting
-    rcount=((int)knob[1]<<8)+0x1100+rrcount;    
-    rrcount++;
+    rcount=((int)knob[1]<<8)+0x1100+rrcount;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
-      rcount=((int)knob[1]<<8)+0x1100;  
+      rcount=((int)knob[1]<<8)+0x1100;
       rrcount=0;
     }
     break;
   case 6:
-    rcount=(knob[1]<<7)+0x1100+rrcount;    
-    rrcount--;
+    rcount=(knob[1]<<7)+0x1100+rrcount;
+    rrcount-=knob[2]&15;
     if (rcount<0x1100) {
       rrcount=61440;
-    rcount=(knob[1]<<7)+0xffff;    
+    rcount=(knob[1]<<7)+0xffff;
     }
     break;
   case 7:
     // shift from static base and keep counting
-    rcount=(rtae<<(knob[2]%8))+0x1100+rrcount;    
-    rrcount++;
+    rcount=(rtae<<(knob[2]%8))+0x1100+rrcount;
+    rrcount+=knob[1]&15;
     if (rcount<0x1100) {
       rrcount=0;
-      rcount=(rtae<<(knob[2]%8))+0x1100;    
+      rcount=(rtae<<(knob[2]%8))+0x1100;
     }
     break;
   case 8:
     // static ceiling
-    rcount=0x1100+rrcount;    
-    rrcount++;
-    if (rrcount>(knob[2]<<7)) rrcount=0;
+    rcount=0x1100+rrcount;
+    rrcount+=knob[2]&15;
+    if (rrcount>(knob[1]<<7)) rrcount=0;
     break;
   case 9:
     rcount=(rtae<<7)+0x1100+rrcount;
-    rrcount++;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
       rrcount=0;
     rcount=(rtae<<7)+0x1100;
@@ -416,7 +422,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 10:
     rcount=(rtae<<4)+0x1100+rrcount;
-    rrcount++;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
       rrcount=0;
     rcount=(rtae<<4)+0x1100;
@@ -424,7 +430,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 11:
     rcount=0x1100+rtae+rrcount;
-    rrcount++;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
       rrcount=0;
     rcount=rtae+0x1100;
@@ -432,7 +438,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 12:
     rcount=0xffff-((rtae<<8)+rrcount);
-    rrcount++;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
       rrcount=0;
     rcount=0xffff-(rtae<<8);
@@ -440,22 +446,31 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 13:
     rcount=((rcount-0x1100)*rtae)+0x1100;
-    rcount++;
+    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
     rcount+=0x1100;
+    rrcount=0;
     }
     break;
   case 14:
-    rcount=((rcount-0x1100)/rtae)+0x1100;
-    if (rcount<0x1100) rcount+=0x1100;  
+    rcount+=(rtae<<(knob[2]%8));
+    if (rcount<0x1100) rcount+=0x1100;
     break;
   case 15:
     rcount=0xffff-((rtae<<5)-rrcount);
-    rrcount++;
-    if (rcount<0x1100) rcount+=0x1100;  
+    rrcount+=knob[2]&15;
+    if (rcount<0x1100) {
+      rcount=0x1100;
+      rrcount=0;
+    }
   }
 
-    //    if (wcount<0x1100) wcount+=0x1100;  
+  //  wcount++;
+
+
+    //  if (wcount<0x1100) wcount+=0x1100;  
+    //  if (rcount<0x1100) rcount+=0x1100;  
+
   
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -813,7 +828,7 @@ unsigned char btunturn(unsigned char* cells, unsigned char IP){
 }
 
 unsigned char btg(unsigned char* cells, unsigned char IP){
-  unsigned char x;
+  unsigned char x=0;
   while (x<20 && cells[omem]!=0){
     if (dcdir==0) omem+=1;
     else if (dcdir==1) omem-=1;
@@ -1497,7 +1512,7 @@ unsigned char sine(unsigned char* cellies, unsigned int ink, unsigned int param)
 }
 
 unsigned char insl1(unsigned char* cellies, unsigned int ink, unsigned int param){
-  instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+  instruction=*(unsigned char *)(cellies+instructionpr);
   instructionpr=(*instructionsetplaguew[instruction%6]) (cellies, instructionpr);
   insdirr=dirr;
   if (cells[instructionpr]==255 && dirr<0) dirr=1;
@@ -1506,42 +1521,42 @@ unsigned char insl1(unsigned char* cellies, unsigned int ink, unsigned int param
 }
 
 unsigned char insl2(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionpr);
       instructionpr=(*instructionsetfirstr[instruction%20]) ((unsigned char*)cellies, instructionpr);
       insdirr=dirr;
       return rtae;
 }
 
 unsigned char insl3(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionpr);
       instructionpr=(*instructionsetbfr[instruction%8]) ((unsigned char *)cellies, instructionpr);
       insdirr=dirr;
       return rtae;
 }
 
 unsigned char insl4(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionpr);
       instructionpr=(*instructionsetSIRr[instruction%5]) ((unsigned char *)cellies, instructionpr);
       insdirr=dirr;
       return rtae;
 }
 
 unsigned char insl5(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionpr);
       instructionpr=(*instructionsetredcoder[instruction%10]) ((unsigned char *)lsamp, instructionpr);
       insdirr=dirr;
       return rtae;
 }
 
 unsigned char insl6(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionpr);
       instructionpr=(*instructionsetreddeathr[instruction%7]) ((unsigned char *)lsamp, instructionpr);
-      insdirr=dirr;
+      instructionpr+=dirr;
       return rtae;
 }
 
 unsigned char insl7(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionpr%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionpr=(*instructionsetbiotar[instruction%9]) ((unsigned char *)cellies, instructionpr); 
       if (btdir==0) instructionpr+=1;
       else if (btdir==1) instructionpr-=1;
@@ -1551,7 +1566,7 @@ unsigned char insl7(unsigned char* cellies, unsigned int ink, unsigned int param
 }
 
 unsigned char ins1(unsigned char* cellies, unsigned int ink, unsigned int param){
-  instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+  instruction=*(unsigned char *)(cellies+instructionp);
   instructionp=(*instructionsetplaguew[instruction%6]) (cellies, instructionp);
   insdir=dir;
   if (cells[instructionp]==255 && dir<0) dir=1;
@@ -1560,21 +1575,21 @@ unsigned char ins1(unsigned char* cellies, unsigned int ink, unsigned int param)
 }
 
 unsigned char ins2(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionp=(*instructionsetfirstr[instruction%20]) ((unsigned char*)cellies, instructionp);
       insdir=dir;
       return wtae;
 }
 
 unsigned char ins3(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionp=(*instructionsetbfr[instruction%8]) ((unsigned char *)cellies, instructionp);
       insdir=dir;
       return wtae;
 }
 
 unsigned char ins4(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionp=(*instructionsetSIRr[instruction%5]) ((unsigned char *)cellies, instructionp);
       insdir=dir;
       return wtae;
@@ -1582,21 +1597,21 @@ unsigned char ins4(unsigned char* cellies, unsigned int ink, unsigned int param)
 
 
 unsigned char ins5(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionp=(*instructionsetredcoder[instruction%10]) ((unsigned char *)cellies, instructionp);
       insdir=dir;
       return wtae;
 }
 
 unsigned char ins6(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instructionp);
       instructionp=(*instructionsetreddeathr[instruction%7]) ((unsigned char *)cellies, instructionp);
-      insdir=dir;
+      instructionp+=dir;
       return wtae;
 }
 
 unsigned char ins7(unsigned char* cellies, unsigned int ink, unsigned int param){
-      instruction=*(unsigned char *)(cellies+(instructionp%grainsize));
+      instruction=*(unsigned char *)(cellies+instruction);
       instructionp=(*instructionsetbiotaw[instruction%9]) ((unsigned char *)cellies, instructionp); 
       if (btdir==0) instructionp+=1;
       else if (btdir==1) instructionp-=1;
@@ -1643,15 +1658,15 @@ unsigned char non(unsigned char* cellies, unsigned int ink, unsigned int param){
 unsigned char hodge(unsigned char* cellies, unsigned int wr, unsigned int param){
   int sum=0, numill=0, numinf=0;
   unsigned char q,k1,k2,g;
-  static unsigned char x;
+  static unsigned char x=16;
+  unsigned char chunk=16; //?????
   static unsigned char flag=0;
   unsigned char *newcells, *cells;
-  x=chunk;
   if ((flag&0x01)==0) {
     cells=cellies; newcells=&cells[chunk/2];
   }
   else {
-    cells=cellies[chunk/2]; newcells=cellies;
+    cells=&cellies[chunk/2]; newcells=cellies;
   }      
 
   q=cells[0];k1=cells[1];k2=cells[2];g=cells[3];
@@ -1932,8 +1947,8 @@ unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) 
 
   for(;;){
     x++;
-    if ((x%(knob[5]%8))==0) wtae=(*wplag[knob[5]>>3])((unsigned char*)lsamp,wtae,knob[2]%8); // does lsamp overflow?
-    if ((x%(knob[1]%8))==0) rtae=(*rplag[knob[1]>>3])((unsigned char*)lsamp,rtae,knob[3]%8);
+    if ((x%((knob[5]&7)+1))==0) wtae=(*wplag[knob[5]>>3])((unsigned char*)lsamp,wtae,knob[2]&7); // does lsamp overflow?
+    if ((x%((knob[1]&7)+1))==0) rtae=(*rplag[knob[1]>>3])((unsigned char*)lsamp,rtae,knob[3]&7);
 
     cli();
     ADMUX = 0x61+kwhich;                
