@@ -14,6 +14,8 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 TODO:
 
+- latency on knobs
+
 - do rambanks
 
 - do something with modrrr and add codehead shift somehow
@@ -159,7 +161,7 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   unsigned char ccccc;
   unsigned int ADresult;
-  unsigned char tmp;
+  static unsigned char tmp;
   static unsigned char subcountr=0,subcountw=0;
   static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
@@ -170,7 +172,6 @@ SIGNAL(TIMER1_COMPA_vect) {
   loop_until_bit_is_set(ADCSRA, ADIF);
 
   xramptr = (unsigned char *)(wcount);
-
   switch(knob[0]>>5){ //
   case 0:
   *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
@@ -194,10 +195,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   *xramptr=tmp;
     break;
   case 6:
-  xramptr = (unsigned char *)(rcount);
-  tmp=*xramptr;
-  xramptr = (unsigned char *)(wcount);
-  *xramptr*=tmp;
+  *xramptr=tmp;
     break;
   case 7:
   xramptr = (unsigned char *)(wcount);
@@ -1950,14 +1948,15 @@ unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) 
     if ((x%((knob[5]&7)+1))==0) wtae=(*wplag[knob[5]>>3])((unsigned char*)lsamp,wtae,knob[2]&7); // does lsamp overflow?
     if ((x%((knob[1]&7)+1))==0) rtae=(*rplag[knob[1]>>3])((unsigned char*)lsamp,rtae,knob[3]&7);
 
+    //    for(kwhich=0;kwhich++;kwhich<7){
     cli();
     ADMUX = 0x61+kwhich;                
     high(ADCSRA, ADSC); 
     loop_until_bit_is_set(ADCSRA, ADIF);
     knob[kwhich]=ADCH;
-    sei();
-    kwhich++;
-    kwhich&=0x07;
+    sei();//}
+        kwhich++;
+        kwhich&=0x07;
 
   if ((PIND & 0x02) == 0x00) PORTD=(PORTD&0x43)+0x80;    // straight out - SW5 PD7 HIGH
   else {
