@@ -354,7 +354,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   }
 
-    cccc=5;
+    cccc=6;
     switch(cccc){
     //      switch(knob[2]>>4){
   case 0:
@@ -407,28 +407,35 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
     //from here on need to figure out;
   case 5:
-    // shift from static base and keep counting
-    temper=knob[1]&0x1f; // lop top 3 bits to be used for bank
+    // shift from static base and keep counting up - problem with end setting of knob[1]=255
+    cccc=knob[1];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
     rcount=(((int)(temper))<<11)+0x1100+rrcount;
-    rrambank=(knob[1]>>5)+offset;
-    rrcount+=(knob[2]&15)+1;
+     rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
           rcount+=(((int)(temper))<<11)+0x1100;
     rrcount=0;
     offset++;
-    if ((rrambank+1)>7) {
-      rrambank=(knob[1]>>5);
-      offset=0;
     }
-    }
+    if (((cccc>>5)+offset)>7) offset=0;
+    rrambank=(cccc>>5)+offset;
     break;
   case 6:
-    rcount=(knob[1]<<7)+0x1100+rrcount;
-    rrcount-=knob[2]&15;
+    // reverse from static base down to 0 - problem with knob[0] at 0
+    cccc=knob[1];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    rcount=(((int)(temper<<10))+0x1100)-rrcount;
+    rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
-      rrcount=61440;
-    rcount=(knob[1]<<7)+0xffff;
+      rcount=(int)0xffff;
+      rrcount=0;
+      offset++;
     }
+	if (((cccc>>5)-offset)>7) {
+	  offset=0;
+	  rcount=((int)(temper<<10))+0x1100;
+	}
+    rrambank=(cccc>>5)-offset;
     break;
   case 7:
     // shift from static base and keep counting
