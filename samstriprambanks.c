@@ -14,8 +14,10 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 TODO:
 
-- also functions to jump rambanks and so on IN REDDEATH!
-- all speed ups should now be somehow fractional so not all speeding up
+- some speed ups should now be somehow fractional so not all speeding up too much
+- could be done with float table (say 64 or 128 values)
+- port all from rcount to wcount routine
+- check mixing fractionals
 
 ///
 
@@ -116,6 +118,8 @@ const uint8_t  sinewave[] PROGMEM= //256 values
 0x4f,0x51,0x54,0x57,0x5a,0x5d,0x60,0x63,0x67,0x6a,0x6d,0x70,0x73,0x76,0x79,0x7c
 };
 
+
+
 signed char insdir,dir,dirr,insdirr; 
 
 unsigned char filterk, cpu, plague, hardk, fhk, instruction, IP, controls, hardware, samp, count,qqq;
@@ -141,6 +145,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   static unsigned char subcountr=0,subcountw=0;
   static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
+  static float flrc,flwc;
   //  static unsigned long wc,rc;
  
   ADMUX = 0x60; // clear existing channel selection 8 BIT                
@@ -180,7 +185,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 7:
     xramptr = (unsigned char *)(wcount); // modulate
-  *xramptr*=wtae;
+    *xramptr*=(float)wtae/(knob[0]&15);;
   }
 
     PORTE=(PORTE&0x0F) + (rrambank<<5);
@@ -217,7 +222,8 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   case 6:
   xramptr = (unsigned char *)(rcount);
-  tmp=*xramptr*rtae;
+  //  tmp=*xramptr*rtae;
+  tmp*=*xramptr*((float)rtae/(knob[0]&15));
   break;
   case 7:
   xramptr = (unsigned char *)(wcount);
@@ -225,12 +231,9 @@ SIGNAL(TIMER1_COMPA_vect) {
     break;
   }
 
-  // insert WRITEHEAD!
-
-          switch(knob[3]>>4){
+  switch(knob[3]>>4){
   case 0:
-        wcount+=(knob[5]>>2)+1;
-    //    wcount++;
+    wcount+=(knob[5]>>2)+1;
     if (wcount<0x1100) {
       wcount+=0x1100;
       wrambank++;
@@ -363,14 +366,16 @@ SIGNAL(TIMER1_COMPA_vect) {
     }
     break;
   case 11: 
-    wcount=0x1100+wtae+wwcount;
-    wwcount+=(knob[3]&15+1);
+    if ((subcountw&(wtae+1))==0){
+      wcount+=(knob[3]&15)+1;
+    subcountw=0;
     if (wcount<0x1100) {
-      wwcount=0;
       wcount+=0x1100;
       wrambank++;
       wrambank&=0x07;
-    }
+   }
+}
+    subcountw++;
     break;
     case 12: //no change in BANK
       wcount=((wcount-0x1100)*wtae)+0x1100;
@@ -387,18 +392,22 @@ SIGNAL(TIMER1_COMPA_vect) {
     }
     break;
   case 14: 
-    wcount+=(wtae<<(knob[3]&7));
+    if ((subcountw&(knob[5]&15))==0){
+      wcount+=(wtae<<(knob[3]&7));
+    subcountw=0;
     if (wcount<0x1100) {
       wcount+=0x1100;
       wrambank++;
       wrambank&=0x07;
-    }
+   }
+}
+    subcountw++;
     break;
     case 15:
     cccc=wtae;
     temper=cccc&0x1f; // lop top 3 bits to be used for bank
-    wcount=(((int)(temper))<<(knob[5]&5))+0x1100+wwcount;
-     wwcount+=(wtae)+1;
+    wcount=(((int)(temper))<<(knob[5]&7))+0x1100+wwcount;
+    wwcount+=(wtae)+1;
     if (wcount<0x1100) {
       wcount+=(((int)(temper))<<11)+0x1100;
     wwcount=0;
@@ -408,21 +417,23 @@ SIGNAL(TIMER1_COMPA_vect) {
     wrambank=(cccc>>5)+woffset;
 }
 
-
-    //    switch(cccc){
-          switch(knob[2]>>4){
+  cccc=1;
+  switch(cccc){
+  //  switch(knob[2]>>4){
   case 0:
-        rcount+=(knob[1]>>2)+1;
+    flrc+=(float)((knob[1]>>2)+1)/(float)((knob[2]&15)+1);
+    rcount=(int)flrc+0x1100;
     //    rcount++;
     if (rcount<0x1100) {
       rcount+=0x1100;
+      flrc=0;
       rrambank++;
       rrambank&=0x07;
     }
     break;
-  case 1:
-    rcount=((rcount-0x1100)*knob[1]>>4)+rrcount+0x1100;
-    rrcount+=(knob[1]&15)+1;
+  case 1: // TODO FOR WCOUNT
+    rcount=(((rcount-0x1100)+1)*((int)knob[1]*1)+0x1100);
+    //    rrcount+=(knob[1]&15)+1;
     if (rcount<0x1100) {
       rcount+=0x1100;
       rrambank++;
@@ -521,7 +532,7 @@ SIGNAL(TIMER1_COMPA_vect) {
     }
     rrambank=roffset;
    break;
-  case 9:
+	  case 9:
     cccc=rtae;
     temper=cccc&0x1f; // lop top 3 bits to be used for bank
     rcount=(((int)(temper))<<11)+0x1100+rrcount;
@@ -534,7 +545,8 @@ SIGNAL(TIMER1_COMPA_vect) {
     if (((cccc>>5)+roffset)>7) roffset=0;
     rrambank=(cccc>>5)+roffset;
     break;
-    case 10:
+
+	  case 10:
     rcount=(rtae<<4)+0x1100+rrcount;
     rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
@@ -546,14 +558,16 @@ SIGNAL(TIMER1_COMPA_vect) {
     }
     break;
   case 11: 
-    rcount=0x1100+rtae+rrcount;
-    rrcount+=(knob[2]&15+1);
+    if ((subcountr&(rtae+1))==0){
+      rcount+=(knob[2]&15)+1;
+    subcountr=0;
     if (rcount<0x1100) {
-      rrcount=0;
       rcount+=0x1100;
       rrambank++;
       rrambank&=0x07;
-    }
+   }
+}
+    subcountw++;
     break;
     case 12: //no change in BANK
       rcount=((rcount-0x1100)*rtae)+0x1100;
@@ -569,18 +583,22 @@ SIGNAL(TIMER1_COMPA_vect) {
       rcount+=0x1100;
     }
     break;
-  case 14: 
-    rcount+=(rtae<<(knob[2]&7));
+  case 14:
+    if ((subcountr&(knob[1]&15))==0){
+      rcount+=(rtae<<(knob[2]&7));
+    subcountr=0;
     if (rcount<0x1100) {
       rcount+=0x1100;
       rrambank++;
       rrambank&=0x07;
-    }
+   }
+}
+    subcountw++;
     break;
     case 15:
     cccc=rtae;
     temper=cccc&0x1f; // lop top 3 bits to be used for bank
-    rcount=(((int)(temper))<<(knob[1]&5))+0x1100+rrcount;
+    rcount=(((int)(temper))<<(knob[1]&7))+0x1100+rrcount;
      rrcount+=(rtae)+1;
     if (rcount<0x1100) {
       rcount+=(((int)(temper))<<11)+0x1100;
@@ -1012,7 +1030,9 @@ unsigned char redclockw(unsigned char* cells, unsigned char IP){
   clock++;
   if (clock%60==0) {
     mainclock++;
-    wtae^=255;
+    //    wtae^=255;
+    wrambank++;
+    wrambank&=0x07;
     return IP; // everyone stops
   }
   else return IP+insdir;
@@ -1022,7 +1042,9 @@ unsigned char redclockr(unsigned char* cells, unsigned char IP){
   clock++;
   if (clock%60==0) {
     mainclock++;
-    rtae^=255;
+    //    rtae^=255;
+    rrambank++;
+    rrambank&=0x07;
     return IP; // everyone stops
   }
   else return IP+insdir;
@@ -1030,41 +1052,75 @@ unsigned char redclockr(unsigned char* cells, unsigned char IP){
 
 
 //4- seven rooms: divide cellspace into 7 - 7 layers with filter each
-unsigned char redrooms(unsigned char* cells, unsigned char IP){
-  //  need to change for blackdeath
-  // CHANGE! for rambank switching
+unsigned char redroomsr(unsigned char* cells, unsigned char IP){
 
   switch(IP%7){
   case 0:
     //blue
-    rtae=1;
+    rrambank=0;
      break;
   case 1:
     //purple
-    rtae*=2;
+    rrambank=1;
      break;
   case 2:
     //green
-    rtae*=3;
+    rrambank=2;
      break;
   case 3:
     //orange
-    rtae*=4;
+    rrambank=3;
      break;
   case 4:
     //white
-    rtae*=5;
+    rrambank=4;
      break;
   case 5:
     //violet
-    rtae*=6;
+    rrambank=5;
     break;
   case 6:
     // black
-    rtae*=rtae;
+    rrambank=6;
   }
   return IP+insdir;
 }
+
+//4- seven rooms: divide cellspace into 7 - 7 layers with filter each
+unsigned char redroomsw(unsigned char* cells, unsigned char IP){
+
+  switch(IP%7){
+  case 0:
+    //blue
+    wrambank=0;
+     break;
+  case 1:
+    //purple
+    wrambank=1;
+     break;
+  case 2:
+    //green
+    wrambank=2;
+     break;
+  case 3:
+    //orange
+    wrambank=3;
+     break;
+  case 4:
+    //white
+    wrambank=4;
+     break;
+  case 5:
+    //violet
+    wrambank=5;
+    break;
+  case 6:
+    // black
+    wrambank=6;
+  }
+  return IP+insdir;
+}
+
 
   //5- unmasking (change neighbouring cells)
 
@@ -1453,7 +1509,7 @@ unsigned char writesamp(unsigned char* cells, unsigned char IP){
 
   unsigned char (*instructionsetbiotaw[])(unsigned char* cells, unsigned char IP) = {btempty,btoutpw,btstraight,btbackup,btturn,btunturn,btg,btclear,btdup}; // 9
 
-  unsigned char (*instructionsetreddeathw[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclockw,redrooms,redunmask,redprosperow,redoutside}; // 7
+  unsigned char (*instructionsetreddeathw[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclockw,redroomsw,redunmask,redprosperow,redoutside}; // 7
 
   // *2
 
@@ -1469,7 +1525,7 @@ unsigned char writesamp(unsigned char* cells, unsigned char IP){
 
   unsigned char (*instructionsetbiotar[])(unsigned char* cells, unsigned char IP) = {btempty,btoutpr,btstraight,btbackup,btturn,btunturn,btg,btclear,btdup}; // 9
 
-  unsigned char (*instructionsetreddeathr[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclockr,redrooms,redunmask,redprosperor,redoutside}; // 7
+  unsigned char (*instructionsetreddeathr[])(unsigned char* cells, unsigned char IP) = {redplague,reddeath,redclockr,redroomsr,redunmask,redprosperor,redoutside}; // 7
 
 /// back to older 
 
@@ -1741,18 +1797,20 @@ unsigned char worm(unsigned char* cellies, unsigned int ink, unsigned int param)
   else if (*(cellies+ink)&0x02) ink-=16;
   else if (*(cellies+ink)&0x04) ink+=1;
   else if (*(cellies+ink)&0x08) ink-=1;
-  return ink<<param;
+  instruction=cellies[instructionp];
+  instructionp+=ink;
+  return instruction<<param;
 }
 
 unsigned char back(unsigned char* cellies, unsigned int ink, unsigned int param){
-  instruction=cells[instructionp];
+  instruction=cellies[instructionp];
   instructionp+=dir;
   return instruction<<param;
 }
 
 unsigned char munge(unsigned char* cellies, unsigned int ink, unsigned int param){
   *(cellies)+=*(cellies+1);
-  return (ink++)<<param;
+  return *(cellies)<<param;
 }
 
 unsigned char coded(unsigned char* cellies, unsigned int ink, unsigned int param){
@@ -1760,9 +1818,13 @@ unsigned char coded(unsigned char* cellies, unsigned int ink, unsigned int param
   return(*ptr<<param);
   }
 
-unsigned char wredo(unsigned char* cellies, unsigned int ink, unsigned int param){
-  unsigned char tmp;
-  tmp=rtae; rtae=wtae;wtae=tmp;
+unsigned char wbank(unsigned char* cellies, unsigned int ink, unsigned int param){
+  wrambank=rtae&0x07;
+  return ink;
+}
+
+unsigned char rbank(unsigned char* cellies, unsigned int ink, unsigned int param){
+  rrambank=wtae&0x07;
   return ink;
 }
 
@@ -2016,9 +2078,9 @@ int main(void)
 
   //  unsigned char (*wplag[])(unsigned char* cells, unsigned int wt, unsigned int p) = {hodgea,hodgeb,hodgec,hodged,inca,incb,incc,incd,deca,decb,decc,decd,cela,celb,celc,celd,lifea,lifeb,lifec,lifed,rossya,rossyb,rossyc,rossyd,ifsya,ifsyb,ifsyc,ifsyd,nona,nonb,nonc,nond}; // reduce to 8 x 4(as mods of modrr)
 
-  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andyr,orryr,excyr,divvyr,starryr,leftyr,rightyr,iffsy, swappy, celr,SIRr,lifer,rossyr,ifsyr,brainyr,insl1,sine,insl2,insl3,insl4,insl5,insl6,insl7,worm,back,munge,coded,wredo,non}; //32!
+  unsigned char (*rplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andyr,orryr,excyr,divvyr,starryr,leftyr,rightyr,iffsy, swappy, celr,SIRr,lifer,rossyr,ifsyr,brainyr,insl1,sine,insl2,insl3,insl4,insl5,insl6,insl7,worm,back,munge,coded,rbank,non}; //32!
 
-unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andyw,orryw,excyw,divvyw,starryw,leftyw,rightyw,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,wredo,non}; //32!
+unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) = {hodge,inc,dec,andyw,orryw,excyw,divvyw,starryw,leftyw,rightyw,iffsy, swappy, cel,SIR,life,rossy,ifsy,brainy,ins1,sine,ins2,ins3,ins4,ins5,ins6,ins7,worm,back,munge,coded,wbank,non}; //32!
 
   instructionp=0; insdir=1; dir=1; btdir=0; dcdir=0;
   instructionpr=0; insdirr=1; dirr=1; btdirr=0; dcdirr=0;
