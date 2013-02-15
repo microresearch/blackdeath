@@ -4,17 +4,18 @@ blackdeath samhain 2012 code base merged with simpler interrupt
 
 ///CONTROLS///
                      TOP    
-                     -0-action on writehead
+                     -0-action on writehead/codehead
 
 -3- write mode                             -2-read mode/scalars
 
--5- w mod                                  -1- r mod/steps
+-5- w mod/steps/datagens                   -1- r mod/steps/datagens
 
-                     -4-action on readhead
+                     -4-action on readhead/codehead
 
 TODO:
 
-[- do rambanks???]
+- also functions to jump rambanks and so on IN REDDEATH!
+- all speed ups should now be somehow fractional so not all speeding up
 
 ///
 
@@ -136,7 +137,7 @@ unsigned char i,ir,tmp;
 SIGNAL(TIMER1_COMPA_vect) {
 
   unsigned char cccc,temper;
-  static unsigned char tmp,offset;
+  static unsigned char tmp,roffset, woffset;
   static unsigned char subcountr=0,subcountw=0;
   static unsigned int wcount=0x1100, wwcount,rrcount;
   static unsigned int rcount=0x1100;
@@ -147,216 +148,269 @@ SIGNAL(TIMER1_COMPA_vect) {
   high(ADCSRA, ADSC); 
   loop_until_bit_is_set(ADCSRA, ADIF);
 
-  // trying diff approach to this!
-  // fix address: which can go 0->491520 (8 banks of 64k-4k=8x60k)
-  // so in theory top 3 bits should be rambank and rest is wcount
-  // how to do 0x1100 offset for each section?
-
   // change wrambank
   PORTE=(PORTE&0x0F) + (wrambank<<5);
   xramptr = (unsigned char *)(wcount);
   *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
 
-  /* switch(knob[0]>>5){ // */
-  /* case 0: */
-  /* *xramptr = (unsigned char) ADCH;// * (*xramptr/2); */
-  /*   break; */
-  /* case 1: */
-  /*   *xramptr *= (float)ADCH/((knob[0]&15)+1); */
-  /*   break; */
-  /* case 2: */
-  /*   *xramptr += (unsigned char) ADCH; */
-  /*   break; */
-  /* case 3: */
-  /*   *xramptr = (float) ADCH*(float)wtae/(knob[0]&15); */
-  /*   break; */
-  /* case 4: */
-  /*   *xramptr ^= (unsigned char) ADCH; */
-  /*   break; */
-  /* case 5: */
-  /*   xramptr = (unsigned char *)(rcount); // swap */
-  /* tmp=*xramptr; */
-  /* xramptr = (unsigned char *)(wcount); */
-  /* *xramptr=tmp; */
-  /*   break; */
-  /* case 6: */
-  /*   *xramptr=tmp; // last figure for read */
-  /*   break; */
-  /* case 7: */
-  /*   xramptr = (unsigned char *)(wcount); // modulate */
-  /* *xramptr*=wtae; */
-  /* } */
+  switch(knob[0]>>5){ //
+  case 0:
+  *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
+    break;
+  case 1:
+    *xramptr *= (float)ADCH/((knob[0]&15)+1);
+    break;
+  case 2:
+    *xramptr += (unsigned char) ADCH;
+    break;
+  case 3:
+    *xramptr = (float) ADCH*(float)wtae/(knob[0]&15);
+    break;
+  case 4:
+    *xramptr ^= (unsigned char) ADCH;
+    break;
+  case 5:
+    xramptr = (unsigned char *)(rcount); // swap
+  tmp=*xramptr;
+  xramptr = (unsigned char *)(wcount);
+  *xramptr=tmp;
+    break;
+  case 6:
+    *xramptr=tmp; // last figure for read
+    break;
+  case 7:
+    xramptr = (unsigned char *)(wcount); // modulate
+  *xramptr*=wtae;
+  }
 
     PORTE=(PORTE&0x0F) + (rrambank<<5);
     xramptr = (unsigned char *)(rcount);
     tmp=*xramptr; 
-  /* switch(knob[4]>>5){ */
-  /* case 0: */
-  /* xramptr = (unsigned char *)(rcount); */
-  /* tmp=*xramptr; */
-  /* break; */
-  /* case 1: */
-  /* xramptr = (unsigned char *)(rcount); */
-  /* tmp=*xramptr; */
-  /* xramptr = (unsigned char *)(wcount); */
-  /* tmp*=(float)(*xramptr)/((knob[4]&15)+1); */
-  /* break; */
-  /* case 2: */
-  /* xramptr = (unsigned char *)(rcount); */
-  /* tmp=*xramptr; */
-  /* xramptr = (unsigned char *)(wcount); */
-  /* tmp+=*xramptr; */
-  /*   break; */
-  /* case 3: */
-  /*   xramptr = (unsigned char *)(0x1100+(wcount-rcount)); */
-  /*   tmp=*xramptr; */
-  /*   break; */
-  /* case 4: */
-  /* xramptr = (unsigned char *)(rcount); */
-  /* tmp*=*xramptr; */
-  /*   break; */
-  /* case 5: */
-  /* xramptr = (unsigned char *)(wcount); */
-  /* tmp*=*xramptr; // ???? */
-  /*   break; */
-  /* case 6: */
-  /* xramptr = (unsigned char *)(rcount); */
-  /* tmp=*xramptr*rtae; */
-  /* break; */
-  /* case 7: */
-  /* xramptr = (unsigned char *)(wcount); */
-  /* tmp=*xramptr; */
-  /*   break; */
-  /* } */
-
-    cccc=0;
-    switch(cccc){
-    //    switch(knob[3]>>4){ 
+  switch(knob[4]>>5){
   case 0:
-    //    wcount+=(knob[5]>>4);
-    wcount++;
-    if (wcount<0x1100) {
-      wcount=0x1100;
-      wrambank++;
-      wrambank&=0x07;
-   }
-    break;
+  xramptr = (unsigned char *)(rcount);
+  tmp=*xramptr;
+  break;
   case 1:
-    wcount=((wcount-0x1100)*(knob[5]>>4))+wwcount+0x1100;
-    wwcount+=(knob[3]&15);
-    if (wcount<0x1100) {
-      wcount+=0x1100;
-   }      
-    break;
+  xramptr = (unsigned char *)(rcount);
+  tmp=*xramptr;
+  xramptr = (unsigned char *)(wcount);
+  tmp*=(float)(*xramptr)/((knob[4]&15)+1);
+  break;
   case 2:
-    wcount=((wcount-0x1100)/knob[5])+wwcount+0x1100;
-    wwcount+=(knob[3]&15);
-    if (wcount<0x1100) {
-      wcount+=0x1100;
-   }
+  xramptr = (unsigned char *)(rcount);
+  tmp=*xramptr;
+  xramptr = (unsigned char *)(wcount);
+  tmp+=*xramptr;
     break;
   case 3:
-    wcount-=(knob[5]>>4);
-    if (wcount<0x1100) {
-      wcount=0xffff;
-   }
+    xramptr = (unsigned char *)(0x1100+(wcount-rcount));
+    tmp=*xramptr;
     break;
   case 4:
-  if ((subcountw&(knob[5]+1))!=0){
-    wcount++;
+  xramptr = (unsigned char *)(rcount);
+  tmp*=*xramptr;
+    break;
+  case 5:
+  xramptr = (unsigned char *)(wcount);
+  tmp*=*xramptr; // ????
+    break;
+  case 6:
+  xramptr = (unsigned char *)(rcount);
+  tmp=*xramptr*rtae;
+  break;
+  case 7:
+  xramptr = (unsigned char *)(wcount);
+  tmp=*xramptr;
+    break;
+  }
+
+  // insert WRITEHEAD!
+
+          switch(knob[3]>>4){
+  case 0:
+        wcount+=(knob[5]>>2)+1;
+    //    wcount++;
+    if (wcount<0x1100) {
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
+    }
+    break;
+  case 1:
+    wcount=((wcount-0x1100)*knob[5]>>4)+wwcount+0x1100;
+    wwcount+=(knob[5]&15)+1;
+    if (wcount<0x1100) {
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
+    }
+    break;
+  case 2:
+    wcount=((wcount-0x1100)/(knob[5]+1))+wwcount+0x1100;
+    wwcount+=(knob[3]&15)+1;
+    if (wcount<0x1100) {
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
+      wwcount=0;
+    }
+    break;
+  case 3:
+    wcount-=(knob[5]>>4)+1;
+    if (wcount<0x1100) {
+      wcount=0xffff;
+      wrambank--;
+      wrambank&=0x07;
+    }
+    break;
+  case 4:
+    if ((subcountw&(knob[5]+1))==0){
+      wcount+=(knob[3]&15)+1;
     subcountw=0;
     if (wcount<0x1100) {
       wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
    }
 }
     subcountw++;
     break;
   case 5:
-    // shift from static base and keep counting
-    wcount=((int)knob[5]<<8)+0x1100+wwcount;
-    wwcount+=(knob[3]&15);
+    // shift from static base and keep counting up - problem with end setting of knob[5]=255
+    cccc=knob[5];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    wcount=(((int)(temper))<<11)+0x1100+wwcount;
+     wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
-      wcount=((int)knob[5]<<8)+0x1100;
-      wwcount=0;
+          wcount+=(((int)(temper))<<11)+0x1100;
+    wwcount=0;
+    woffset++;
     }
+    if (((cccc>>5)+woffset)>7) woffset=0;
+    wrambank=(cccc>>5)+woffset;
     break;
   case 6:
-    wcount=(knob[5]<<7)+0x1100+wwcount;
-    wwcount-=(knob[3]&15);
+    // reverse from static base down to 0 - problem with knob[3] at 0
+    cccc=knob[5];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    wcount=(((int)(temper<<10))+0x1100)-wwcount;
+    wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
-      wwcount=61440;
-    wcount=(knob[5]<<7)+0xffff;
+      wcount=(int)0xffff;
+      wwcount=0;
+      woffset++;
     }
+	if (((cccc>>5)-woffset)>7) {
+	  woffset=0;
+	  wcount=((int)(temper<<10))+0x1100;
+	}
+    wrambank=(cccc>>5)-woffset;
     break;
   case 7:
     // shift from static base and keep counting
-    wcount=(wtae<<(knob[5]&7))+0x1100+wwcount;
-    wwcount+=(knob[3]&15);
+    cccc=wtae<<(knob[5]&5);
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    wcount=(((int)(temper))<<11)+0x1100+wwcount;
+     wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
-      wwcount=0;
-      wcount=(wtae<<(knob[5]&7))+0x1100;
+      wcount+=(((int)(temper))<<11)+0x1100;
+    wwcount=0;
+    woffset++;
     }
+    if (((cccc>>5)+woffset)>7) woffset=0;
+    wrambank=(cccc>>5)+woffset;
     break;
- case 8:
+  case 8:
     // static ceiling
+    cccc=knob[5];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
     wcount=0x1100+wwcount;
-    wwcount+=(knob[3]&15);
-    if (wwcount>(knob[5]<<7)) wwcount=0;
-    break;
- case 9:
-   wcount+=(wtae<<(knob[5]>>4));
-   if (wcount<0x1100) {
-     wcount+=0x1100;
-   }
-   break;
- case 10:
-    wcount=0xffff-((wtae<<5)-wwcount);
-    wwcount+=knob[3]&15;
+    wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
-      wcount=0x1100;
+      wcount+=(((int)(temper))<<11)+0x1100;
       wwcount=0;
+      woffset++;
     }
+    if (wwcount>=(((int)(temper)<<11)) && woffset>=(cccc>>5)) {
+      wwcount=0;
+      woffset=0;
+    }
+    wrambank=woffset;
    break;
- case 11:
-    wcount=(wtae<<7)+0x1100+wwcount;
-    wwcount+=(knob[3]&15);
+  case 9:
+    cccc=wtae;
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    wcount=(((int)(temper))<<11)+0x1100+wwcount;
+     wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
-      wwcount=0;
-    wcount=(wtae<<7)+0x1100;
+      wcount+=(((int)(temper))<<11)+0x1100;
+    wwcount=0;
+    woffset++;
     }
+    if (((cccc>>5)+woffset)>7) woffset=0;
+    wrambank=(cccc>>5)+woffset;
     break;
-  case 12:
+    case 10:
     wcount=(wtae<<4)+0x1100+wwcount;
-    wwcount+=(knob[3]&15);
+    wwcount+=(knob[3]&15)+1;
     if (wcount<0x1100) {
       wwcount=0;
-    wcount=(wtae<<4)+0x1100;
+      //    wcount=(wtae<<4)+0x1100;
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
+    }
+    break;
+  case 11: 
+    wcount=0x1100+wtae+wwcount;
+    wwcount+=(knob[3]&15+1);
+    if (wcount<0x1100) {
+      wwcount=0;
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
+    }
+    break;
+    case 12: //no change in BANK
+      wcount=((wcount-0x1100)*wtae)+0x1100;
+    if (wcount<0x1100) {
+      wcount+=0x1100;
     }
     break;
   case 13:
-    wcount=0x1100+wtae+wwcount;
-    wwcount+=(knob[3]&15);
+    temper=wtae&0x1f; // lop top 3 bits to be used for bank
+    wrambank=wtae>>5;
+    wcount=((wcount-0x1100)*temper)+0x1100;
     if (wcount<0x1100) {
-      wwcount=0;
-    wcount=wtae+0x1100;
+      wcount+=0x1100;
     }
     break;
-  case 14:
-    wcount=0xffff-((wtae<<8)+wwcount);
-    wwcount+=(knob[3]&15);
+  case 14: 
+    wcount+=(wtae<<(knob[3]&7));
     if (wcount<0x1100) {
-      wwcount=0;
-    wcount=0xffff-(wtae<<8);
+      wcount+=0x1100;
+      wrambank++;
+      wrambank&=0x07;
     }
     break;
-  case 15:
-    wcount=((wcount-0x1100)/wtae)+0x1100;
-    break;
-  }
+    case 15:
+    cccc=wtae;
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    wcount=(((int)(temper))<<(knob[5]&5))+0x1100+wwcount;
+     wwcount+=(wtae)+1;
+    if (wcount<0x1100) {
+      wcount+=(((int)(temper))<<11)+0x1100;
+    wwcount=0;
+    woffset++;
+    }
+    if (((cccc>>5)+woffset)>7) woffset=0;
+    wrambank=(cccc>>5)+woffset;
+}
 
-    cccc=6;
-    switch(cccc){
-    //      switch(knob[2]>>4){
+
+    //    switch(cccc){
+          switch(knob[2]>>4){
   case 0:
         rcount+=(knob[1]>>2)+1;
     //    rcount++;
@@ -394,18 +448,17 @@ SIGNAL(TIMER1_COMPA_vect) {
     }
     break;
   case 4:
-    if ((subcountr&(knob[1]+1))!=0){
-    rcount++;
-    subcountr=0;
-    if (rcount<0x1100) {
-      rcount+=0x1100;
-      rrambank++;
-      rrambank&=0x07;
-   }
-}
+    if ((subcountr&(knob[1]+1))==0){
+      rcount+=(knob[2]&15)+1;
+      subcountr=0;
+      if (rcount<0x1100) {
+	rcount+=0x1100;
+	rrambank++;
+	rrambank&=0x07;
+      }
+    }
     subcountr++;
     break;
-    //from here on need to figure out;
   case 5:
     // shift from static base and keep counting up - problem with end setting of knob[1]=255
     cccc=knob[1];
@@ -415,13 +468,13 @@ SIGNAL(TIMER1_COMPA_vect) {
     if (rcount<0x1100) {
           rcount+=(((int)(temper))<<11)+0x1100;
     rrcount=0;
-    offset++;
+    roffset++;
     }
-    if (((cccc>>5)+offset)>7) offset=0;
-    rrambank=(cccc>>5)+offset;
+    if (((cccc>>5)+roffset)>7) roffset=0;
+    rrambank=(cccc>>5)+roffset;
     break;
   case 6:
-    // reverse from static base down to 0 - problem with knob[0] at 0
+    // reverse from static base down to 0 - problem with knob[2] at 0
     cccc=knob[1];
     temper=cccc&0x1f; // lop top 3 bits to be used for bank
     rcount=(((int)(temper<<10))+0x1100)-rrcount;
@@ -429,88 +482,114 @@ SIGNAL(TIMER1_COMPA_vect) {
     if (rcount<0x1100) {
       rcount=(int)0xffff;
       rrcount=0;
-      offset++;
+      roffset++;
     }
-	if (((cccc>>5)-offset)>7) {
-	  offset=0;
+	if (((cccc>>5)-roffset)>7) {
+	  roffset=0;
 	  rcount=((int)(temper<<10))+0x1100;
 	}
-    rrambank=(cccc>>5)-offset;
+    rrambank=(cccc>>5)-roffset;
     break;
   case 7:
     // shift from static base and keep counting
-    rcount=(rtae<<(knob[2]&7))+0x1100+rrcount;
-    rrcount+=knob[1]&15;
+    cccc=rtae<<(knob[1]&5);
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    rcount=(((int)(temper))<<11)+0x1100+rrcount;
+     rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
-      rrcount=0;
-      rcount=(rtae<<(knob[2]&7))+0x1100;
+      rcount+=(((int)(temper))<<11)+0x1100;
+    rrcount=0;
+    roffset++;
     }
+    if (((cccc>>5)+roffset)>7) roffset=0;
+    rrambank=(cccc>>5)+roffset;
     break;
   case 8:
     // static ceiling
+    cccc=knob[1];
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
     rcount=0x1100+rrcount;
-    rrcount+=knob[2]&15;
-    if (rrcount>(knob[1]<<7)) rrcount=0;
-    break;
+    rrcount+=(knob[2]&15)+1;
+    if (rcount<0x1100) {
+      rcount+=(((int)(temper))<<11)+0x1100;
+      rrcount=0;
+      roffset++;
+    }
+    if (rrcount>=(((int)(temper)<<11)) && roffset>=(cccc>>5)) {
+      rrcount=0;
+      roffset=0;
+    }
+    rrambank=roffset;
+   break;
   case 9:
-    rcount=(rtae<<7)+0x1100+rrcount;
-    rrcount+=knob[2]&15;
+    cccc=rtae;
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    rcount=(((int)(temper))<<11)+0x1100+rrcount;
+     rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
-      rrcount=0;
-    rcount=(rtae<<7)+0x1100;
+      rcount+=(((int)(temper))<<11)+0x1100;
+    rrcount=0;
+    roffset++;
     }
+    if (((cccc>>5)+roffset)>7) roffset=0;
+    rrambank=(cccc>>5)+roffset;
     break;
-  case 10:
+    case 10:
     rcount=(rtae<<4)+0x1100+rrcount;
-    rrcount+=knob[2]&15;
+    rrcount+=(knob[2]&15)+1;
     if (rcount<0x1100) {
       rrcount=0;
-    rcount=(rtae<<4)+0x1100;
+      //    rcount=(rtae<<4)+0x1100;
+      rcount+=0x1100;
+      rrambank++;
+      rrambank&=0x07;
     }
     break;
-  case 11:
+  case 11: 
     rcount=0x1100+rtae+rrcount;
-    rrcount+=knob[2]&15;
+    rrcount+=(knob[2]&15+1);
     if (rcount<0x1100) {
       rrcount=0;
-    rcount=rtae+0x1100;
+      rcount+=0x1100;
+      rrambank++;
+      rrambank&=0x07;
     }
     break;
-  case 12:
-    rcount=0xffff-((rtae<<8)+rrcount);
-    rrcount+=knob[2]&15;
+    case 12: //no change in BANK
+      rcount=((rcount-0x1100)*rtae)+0x1100;
     if (rcount<0x1100) {
-      rrcount=0;
-    rcount=0xffff-(rtae<<8);
+      rcount+=0x1100;
     }
     break;
   case 13:
-    rcount=((rcount-0x1100)*rtae)+0x1100;
-    rrcount+=knob[2]&15;
+    temper=rtae&0x1f; // lop top 3 bits to be used for bank
+    rrambank=rtae>>5;
+    rcount=((rcount-0x1100)*temper)+0x1100;
     if (rcount<0x1100) {
-    rcount+=0x1100;
-    rrcount=0;
+      rcount+=0x1100;
     }
     break;
-  case 14:
+  case 14: 
     rcount+=(rtae<<(knob[2]&7));
-    if (rcount<0x1100) rcount+=0x1100;
-    break;
-  case 15:
-    rcount=0xffff-((rtae<<5)-rrcount);
-    rrcount+=knob[2]&15;
     if (rcount<0x1100) {
-      rcount=0x1100;
-      rrcount=0;
+      rcount+=0x1100;
+      rrambank++;
+      rrambank&=0x07;
     }
+    break;
+    case 15:
+    cccc=rtae;
+    temper=cccc&0x1f; // lop top 3 bits to be used for bank
+    rcount=(((int)(temper))<<(knob[1]&5))+0x1100+rrcount;
+     rrcount+=(rtae)+1;
+    if (rcount<0x1100) {
+      rcount+=(((int)(temper))<<11)+0x1100;
+    rrcount=0;
+    roffset++;
+    }
+    if (((cccc>>5)+roffset)>7) roffset=0;
+    rrambank=(cccc>>5)+roffset;
   }
-
-  //  wcount++;
-
-
-    //  if (wcount<0x1100) wcount+=0x1100;  
-    //  if (rcount<0x1100) rcount+=0x1100;  
-
   
   low(PORTB, CYWM_nSS);
   SPDR = 0b00001001;				// Send SPI byte
@@ -952,7 +1031,8 @@ unsigned char redclockr(unsigned char* cells, unsigned char IP){
 
 //4- seven rooms: divide cellspace into 7 - 7 layers with filter each
 unsigned char redrooms(unsigned char* cells, unsigned char IP){
-  // need to change for blackdeath
+  //  need to change for blackdeath
+  // CHANGE! for rambank switching
 
   switch(IP%7){
   case 0:
@@ -1404,9 +1484,9 @@ void ioinit(void)
 void adc_init(void)
 {
   //  ADCSRA |= (1 << ADPS1) | (1<< ADPS0) ; // seems now to hum = /8
-  //     ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
+       ADCSRA = (1 << ADPS2) | (1<< ADPS0) ; //= 32 - very clean
   //          ADCSRA = (1 << ADPS2); // divide/16
-    ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
+  //    ADCSRA = (1 << ADPS2) | (1<< ADPS1);// /64
   ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
   ADCSRA |= (1 << ADEN) ;
   DDRF = 0x00; // c0 for top two/three??? as OUTPUT
@@ -1988,11 +2068,11 @@ unsigned char (*wplag[])(unsigned char* cells, unsigned int rt, unsigned int p) 
 
   for(;;){
     x++;xx++;
-    if (x==(knob[5]&15)) {
+    if (x>=(knob[5]&15)) {
       wtae=(*wplag[knob[5]>>3])((unsigned char*)(0x1100+(knob[0]<<7)),wtae,knob[2]&7); 
       x=0;
     }
-    if (xx==(knob[1]&15)) {
+    if (xx>=(knob[1]&15)) {
       rtae=(*rplag[knob[1]>>3])((unsigned char*)(0x1100+(knob[4]<<7)),rtae,knob[3]&7);
 	xx=0;
       }
