@@ -22,7 +22,7 @@ TODO:
 ///
 
 */
-#define samplerate 16000 // was 5000
+#define samplerate 12000 // was 5000
 #define F_CPU 16000000UL 
 #define true 1
 #define false 0
@@ -119,7 +119,7 @@ const uint8_t  sinewave[] PROGMEM= //256 values
 };
 
 const float mult[]=
-  {0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,//9
+  {0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1,//9
    0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0, //19
    1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,//29
    3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,//39
@@ -149,6 +149,7 @@ unsigned char i,ir,tmp;
 SIGNAL(TIMER1_COMPA_vect) {
 
   unsigned char cccc,temper;
+  signed char signly, signry; signed int intry;
   static unsigned char tmp,roffset, woffset;
   static unsigned char subcountr=0,subcountw=0;
   static unsigned int wcount=0x1100, wwcount,rrcount;
@@ -164,20 +165,42 @@ SIGNAL(TIMER1_COMPA_vect) {
   // change wrambank
   PORTE=(PORTE&0x0F) + (wrambank<<5);
   xramptr = (unsigned char *)(wcount);
-  *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
+  //  *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
+
+  //signly=(ADCH^0x80); // signed char 
+  // then to int.. do math//check if >127 or <127
+  //dacByte=(((signed char)mathedchar)^0x80);	// back to unsigned char
 
   switch(knob[0]>>5){ //
   case 0:
   *xramptr = (unsigned char) ADCH;// * (*xramptr/2);
     break;
   case 1:
-    *xramptr *= (float)ADCH/((knob[0]&15)+1);
+    //    *xramptr *= (float)ADCH/((knob[0]&15)+1);
+    signly=(ADCH^0x80);
+    signry=(*xramptr^0x80);
+    intry=(signry*signly)/((knob[0]&15)+1);
+    if (intry<-128) intry=-128;
+    else if (intry>127) intry=127;
+    *xramptr=(((signed char)intry)^0x80);
     break;
   case 2:
-    *xramptr += (unsigned char) ADCH;
+    //    *xramptr += (unsigned char) ADCH;
+    signly=(ADCH^0x80);
+    signry=(*xramptr^0x80);
+    intry=(signry+signly);
+    if (intry<-128) intry=-128;
+    else if (intry>127) intry=127;
+    *xramptr=(((signed char)intry)^0x80);
     break;
   case 3:
-    *xramptr = (float) ADCH*(float)wtae/(knob[0]&15);
+    //    *xramptr = (float) ADCH*(float)wtae/(knob[0]&15);
+    signly=(ADCH^0x80);
+    signry=(wtae^0x80);
+    intry=(float) signly*(float)signry/(knob[0]&15);
+    if (intry<-128) intry=-128;
+    else if (intry>127) intry=127;
+    *xramptr=(((signed char)intry)^0x80);
     break;
   case 4:
     *xramptr ^= (unsigned char) ADCH;
@@ -192,13 +215,20 @@ SIGNAL(TIMER1_COMPA_vect) {
     *xramptr=tmp; // last figure for read
     break;
   case 7:
-    xramptr = (unsigned char *)(wcount); // modulate
-    *xramptr*=(float)wtae/(knob[0]&15);;
+    //    xramptr = (unsigned char *)(wcount); // modulate
+    //    *xramptr*=(float)wtae/(knob[0]&15);;
+    signly=(wtae^0x80);
+    signry=(*xramptr^0x80);
+    intry=signry*(float)signly/(knob[0]&15);
+    if (intry<-128) intry=-128;
+    else if (intry>127) intry=127;
+    *xramptr=(((signed char)intry)^0x80);
   }
 
     PORTE=(PORTE&0x0F) + (rrambank<<5);
-    xramptr = (unsigned char *)(rcount);
-    tmp=*xramptr; 
+    //    xramptr = (unsigned char *)(rcount);
+    //    tmp=*xramptr; 
+
   switch(knob[4]>>5){
   case 0:
   xramptr = (unsigned char *)(rcount);
@@ -206,32 +236,58 @@ SIGNAL(TIMER1_COMPA_vect) {
   break;
   case 1:
   xramptr = (unsigned char *)(rcount);
-  tmp=*xramptr;
+  signly=(*xramptr)^0x80;
   xramptr = (unsigned char *)(wcount);
-  tmp*=(float)(*xramptr)/((knob[4]&15)+1);
+  signry=(*xramptr)^0x80;
+  intry=(float) (signry*signly)/((knob[4]&15)+1);
+  if (intry<-128) intry=-128;
+  else if (intry>127) intry=127;
+  tmp=(((signed char)intry)^0x80);
+  //  tmp*=(float)(*xramptr)/((knob[4]&15)+1);
   break;
   case 2:
   xramptr = (unsigned char *)(rcount);
-  tmp=*xramptr;
+  signly=(*xramptr)^0x80;
   xramptr = (unsigned char *)(wcount);
-  tmp+=*xramptr;
-    break;
+  signry=(*xramptr)^0x80;
+  intry=signry+signly;
+  if (intry<-128) intry=-128;
+  else if (intry>127) intry=127;
+  tmp=(((signed char)intry)^0x80);
+  break;
   case 3:
     xramptr = (unsigned char *)(0x1100+(wcount-rcount));
     tmp=*xramptr;
     break;
   case 4:
   xramptr = (unsigned char *)(rcount);
-  tmp*=*xramptr;
+  signly=(*xramptr)^0x80;
+  signry=(tmp)^0x80;
+  intry=signry*signly;
+  if (intry<-128) intry=-128;
+  else if (intry>127) intry=127;
+  tmp=(((signed char)intry)^0x80);
+  //  tmp*=*xramptr;
     break;
   case 5:
   xramptr = (unsigned char *)(wcount);
-  tmp*=*xramptr; // ????
+  signly=(*xramptr)^0x80;
+  signry=(tmp)^0x80;
+  intry=signry*signly;
+  if (intry<-128) intry=-128;
+  else if (intry>127) intry=127;
+  tmp=(((signed char)intry)^0x80);
+  //  tmp*=*xramptr;
     break;
   case 6:
   xramptr = (unsigned char *)(rcount);
-  //  tmp=*xramptr*rtae;
-  tmp*=*xramptr*((float)rtae/(knob[0]&15));
+  signly=(*xramptr)^0x80;
+  signry=(rtae)^0x80;
+  //  tmp*=*xramptr*((float)rtae/(knob[0]&15));
+  intry=signly*((float)signry/(knob[0]&15));
+  if (intry<-128) intry=-128;
+  else if (intry>127) intry=127;
+  tmp=(((signed char)intry)^0x80);
   break;
   case 7:
   xramptr = (unsigned char *)(wcount);
@@ -241,12 +297,23 @@ SIGNAL(TIMER1_COMPA_vect) {
 
   switch(knob[3]>>4){
   case 0:
-    wcount+=(knob[5]>>2)+1;
+    /*    wcount+=(knob[5]>>2)+1;
     if (wcount<0x1100) {
       wcount+=0x1100;
       wrambank++;
       wrambank&=0x07;
+      }*/
+    flwc+=mult[(knob[5]>>2)];///(float)((knob[2]&15)+1);
+    wcount=(int)flwc+0x1100;
+    //    rcount++;
+    if (wcount<0x1100) {
+      wcount+=0x1100;
+      flwc=0;
+      wrambank++;
+      wrambank&=0x07;
     }
+
+
     break;
   case 1:
     wcount=((wcount-0x1100)*knob[5]>>4)+wwcount+0x1100;
@@ -425,9 +492,9 @@ SIGNAL(TIMER1_COMPA_vect) {
     wrambank=(cccc>>5)+woffset;
 }
 
-  cccc=1;
-  switch(cccc){
-  //  switch(knob[2]>>4){
+  //  cccc=1;
+  //  switch(cccc){
+    switch(knob[2]>>4){
   case 0:
     flrc+=mult[(knob[1]>>2)];///(float)((knob[2]&15)+1);
     rcount=(int)flrc+0x1100;
